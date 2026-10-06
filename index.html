@@ -1,0 +1,1482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A parametric portfolio cover generator on weaving point paper: stitched, punched and read into binary.">
+<meta name="author" content="Anna Geng">
+<title>Point Paper Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Arimo:ital,wght@0,400;0,500;0,700;1,400;1,700&family=Bodoni+Moda:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,600;0,700;1,400;1,700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap">
+<style>
+/* Layout: the proof sits centred like a page on the desk; the controls run down the right like a margin column. Stacks proof-first on phones. */
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --fg: #111111;
+  --muted: #6e6e6e;
+  --hair: #e4e4e4;
+  --rule: #c9c9c9;
+  --well: #f4f4f4;
+  --accent: #111111;
+  --accent-fg: #ffffff;
+  --danger: #9b1c1c;
+  --red: #c8103a; /* portfolio swatch C=15 M=100 Y=75 K=0, converted for screen */
+  --serif: "Adobe Garamond Pro", "EB Garamond", Garamond, Georgia, serif;
+  --sans: "Neue Haas Grotesk Display Pro", "Neue Haas Unica", "Helvetica Neue", Helvetica, Arimo, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121212; --panel: #121212; --fg: #ececec; --muted: #9a9a9a; --hair: #2b2b2b;
+    --rule: #444444; --well: #1c1c1c; --accent: #ececec; --accent-fg: #121212; --danger: #f08080; --red: #f0697f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121212; --panel: #121212; --fg: #ececec; --muted: #9a9a9a; --hair: #2b2b2b;
+  --rule: #444444; --well: #1c1c1c; --accent: #ececec; --accent-fg: #121212; --danger: #f08080; --red: #f0697f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 13.5px; line-height: 1.5; }
+.app { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 26px 48px; display: flex; flex-direction: column; gap: 22px; }
+.masthead { text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border-bottom: 1px solid var(--hair); padding-bottom: 16px; }
+/* Type follows the portfolio's InDesign styles: Garamond for everything that names (Header, Chapter Number/Title, Folio, entry headings), Neue Haas only for body text. */
+.masthead h1 { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 44px; line-height: 1.1; letter-spacing: 0.05em; text-wrap: balance; }
+.masthead p { margin: 0; font-size: 12px; font-weight: 400; letter-spacing: 0.05em; color: var(--red); max-width: 64ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 350px); gap: 36px; align-items: start; }
+.stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+.panel { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--hair); padding-left: 24px; }
+.sheet { padding-block: 16px 20px; border-bottom: 1px solid var(--hair); display: flex; flex-direction: column; gap: 12px; }
+.sheet:first-child { padding-top: 0; }
+.sheet:last-child { border-bottom: 0; }
+.sheet h2 { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 22px; line-height: 1.1; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sheet h2 .t { font-weight: 400; color: var(--fg); }
+.sheet h2 .t b { font-weight: 600; color: var(--fg); }
+.sheet h2 small { font-family: var(--serif); font-style: normal; font-weight: 400; font-size: 13px; letter-spacing: 0.05em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sheet h3 { margin: 4px 0 0; font-family: var(--serif); font-style: italic; font-size: 16px; font-weight: 400; letter-spacing: 0.05em; color: var(--fg); }
+.row { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.row > label, .label { font-family: var(--serif); font-size: 14.5px; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+output, .val { font-family: var(--serif); font-size: 13.5px; letter-spacing: 0.05em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border: 1px solid var(--rule); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; padding: 6px 4px; font-size: 12.5px; cursor: pointer; border-left: 1px solid var(--rule); user-select: none; min-height: 34px; display: flex; align-items: center; justify-content: center; }
+.seg label:first-of-type { border-left: 0; }
+.seg input:checked + label { background: var(--accent); color: var(--accent-fg); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; height: 22px; }
+select, input[type="text"], input[type="number"], textarea { width: 100%; font: inherit; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--rule); border-radius: 0; padding: 6px 8px; min-height: 34px; }
+textarea { resize: vertical; min-height: 56px; line-height: 1.4; }
+.check { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 14.5px; letter-spacing: 0.05em; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; flex: none; }
+.checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drop { position: relative; border: 1px dashed var(--rule); padding: 12px; text-align: center; cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: border-color .15s; }
+.drop:hover, .drop.over { border-color: var(--fg); }
+.drop strong { font-family: var(--serif); font-weight: 600; font-size: 15px; letter-spacing: 0.05em; }
+.drop span { font-size: 11.5px; color: var(--muted); word-break: break-word; }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.split { display: flex; height: 24px; border: 1px solid var(--rule); font-size: 11px; font-variant-numeric: tabular-nums; }
+.split div { display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; white-space: nowrap; transition: flex-grow .12s; }
+.share { display: grid; grid-template-columns: 74px minmax(0, 1fr) 38px; align-items: center; gap: 10px; }
+.share label { font-family: var(--serif); font-size: 14.5px; letter-spacing: 0.05em; display: flex; align-items: center; gap: 7px; }
+.chip { width: 10px; height: 10px; flex: none; border: 1px solid var(--rule); }
+.chip.dot { border-radius: 50%; }
+.share output { text-align: right; }
+.weights { display: grid; grid-template-columns: 92px minmax(0, 1fr) 46px; align-items: center; gap: 6px 10px; }
+.weights label { font-family: var(--serif); font-size: 14.5px; letter-spacing: 0.05em; }
+.weights output { text-align: right; }
+.swatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
+.swatch { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.swatch input[type="color"] { width: 30px; height: 26px; padding: 0; border: 1px solid var(--rule); background: none; cursor: pointer; flex: none; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.pal { display: inline-flex; align-items: stretch; }
+.pal .del { min-width: 30px; padding: 0 8px; border-left: 0; color: var(--muted); justify-content: center; }
+.pal .del.armed { color: var(--danger); border-color: var(--danger); }
+.saverow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+button { font: inherit; font-size: 12.5px; color: var(--fg); background: var(--bg); border: 1px solid var(--rule); border-radius: 0; padding: 6px 10px; min-height: 34px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+button:hover { border-color: var(--fg); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.pchip { display: inline-flex; gap: 2px; }
+.pchip i { width: 6px; height: 14px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
+.exports { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 11.5px; color: var(--muted); margin: 0; }
+.custom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 70px; gap: 8px; align-items: end; }
+.proof { --ratio: 0.7727; width: min(100%, 700px, calc((100dvh - 150px) * var(--ratio))); aspect-ratio: var(--ratio); background: var(--well); box-shadow: 0 0 0 1px var(--hair), 0 12px 32px -18px rgba(0,0,0,.35); overflow: auto; overscroll-behavior: contain; }
+.proof canvas { width: calc(100% * var(--zoom, 1)); height: calc(100% * var(--zoom, 1)); display: block; }
+.viewbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; }
+.viewbar .seg { min-width: 210px; }
+.readout { font-family: var(--serif); font-size: 13.5px; font-weight: 400; letter-spacing: 0.05em; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; }
+.readout b { color: var(--fg); font-weight: 600; }
+.hide { display: none !important; }
+@media (max-width: 880px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .stage { position: static; }
+  .panel { border-left: 0; padding-left: 0; border-top: 1px solid var(--hair); padding-top: 16px; }
+  .proof { width: min(100%, 480px); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header class="masthead">
+    <h1>Point Paper Loom</h1>
+    <p>A cover generator: a derived frame, or any image, set on point paper and passed from stitch to punch to bit.</p>
+  </header>
+
+  <div class="layout">
+    <div class="stage">
+      <div class="proof" id="proofBox"><canvas id="proof" role="img" aria-label="Preview of the portfolio cover"></canvas></div>
+      <div class="viewbar">
+        <div class="seg" role="radiogroup" aria-label="Preview zoom">
+          <input type="radio" name="zoom" id="z1" value="1" checked><label for="z1">Fit</label>
+          <input type="radio" name="zoom" id="z2" value="2"><label for="z2">200%</label>
+          <input type="radio" name="zoom" id="z4" value="4"><label for="z4">400%</label>
+        </div>
+        <div class="readout" id="readout"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+
+      <section class="sheet" aria-labelledby="h-profile">
+        <h2 id="h-profile"><span class="t"><b>Profiles</b></span> <small>every setting at once</small></h2>
+        <div class="presets" id="profPresets"></div>
+        <div class="saverow">
+          <input type="text" id="profName" placeholder="Name this profile" aria-label="Profile name">
+          <button type="button" id="profSave">Save profile</button>
+        </div>
+        <p class="note" id="profNote">A profile keeps paper, pattern, states, marks, lines, colours, type, cover text and italics. Uploaded images aren't stored, so add them again after loading one.</p>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-paper">
+        <h2 id="h-paper"><span class="t">I. <b>Paper</b></span> <small id="paperDims">8.5 × 11 in</small></h2>
+        <div class="pair">
+          <div class="row">
+            <label for="size">Size</label>
+            <select id="size">
+              <option value="letter" selected>Letter · 8.5 × 11 in</option>
+              <option value="legal">Legal · 8.5 × 14 in</option>
+              <option value="tabloid">Tabloid · 11 × 17 in</option>
+              <option value="a4">A4 · 210 × 297 mm</option>
+              <option value="a3">A3 · 297 × 420 mm</option>
+              <option value="square">Square · 8.5 × 8.5 in</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="label" id="orientLabel">Orientation</span>
+            <div class="seg" role="radiogroup" aria-labelledby="orientLabel">
+              <input type="radio" name="orient" id="or-p" value="portrait" checked><label for="or-p">Portrait</label>
+              <input type="radio" name="orient" id="or-l" value="landscape"><label for="or-l">Landscape</label>
+            </div>
+          </div>
+        </div>
+        <div class="custom hide" id="customBox">
+          <div class="row"><label for="cw">Width</label><input type="number" id="cw" value="8.5" min="1" max="60" step="0.125"></div>
+          <div class="row"><label for="ch">Height</label><input type="number" id="ch" value="11" min="1" max="60" step="0.125"></div>
+          <div class="row"><label for="cu">Unit</label><select id="cu"><option value="in">in</option><option value="mm">mm</option></select></div>
+        </div>
+        <div class="row">
+          <label for="margin">Margin <output id="marginOut" for="margin">0.50 in · 12.7 mm</output></label>
+          <input type="range" id="margin" min="0" max="1.5" step="0.0625" value="0.5">
+        </div>
+        <div class="row">
+          <label for="cols">Grid columns <output id="colsOut" for="cols">72</output></label>
+          <input type="range" id="cols" min="48" max="160" step="4" value="72">
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-source">
+        <h2 id="h-source"><span class="t">II. <b>Pattern</b></span> <small id="gridDims">72 × 88</small></h2>
+        <div class="seg" role="radiogroup" aria-label="Pattern source">
+          <input type="radio" name="source" id="src-frame" value="frame" checked><label for="src-frame">Frame</label>
+          <input type="radio" name="source" id="src-image" value="image"><label for="src-image">Image</label>
+          <input type="radio" name="source" id="src-both" value="both"><label for="src-both">Frame + image</label>
+        </div>
+        <div class="row" id="frameRow">
+          <label for="frameStyle">Frame</label>
+          <select id="frameStyle">
+            <option value="sampler">Sampler: rope band, stars, medallions, lace</option>
+            <option value="minimal" selected>Minimal: rosettes, vines, one rule</option>
+          </select>
+        </div>
+        <label class="drop" id="drop" for="file">
+          <input type="file" id="file" accept="image/*">
+          <strong>Upload a reference image</strong>
+          <span id="fileName">A photo, scan or drawing. It is converted to cells in your browser.</span>
+        </label>
+        <div id="imageControls" class="hide" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="pair">
+            <div class="row">
+              <label for="algo">Conversion</label>
+              <select id="algo">
+                <option value="floyd">Floyd–Steinberg</option>
+                <option value="atkinson">Atkinson</option>
+                <option value="bayer">Ordered (Bayer 4×4)</option>
+                <option value="threshold">Threshold</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="fit">Fit</label>
+              <select id="fit">
+                <option value="contain">Whole image</option>
+                <option value="cover">Fill area</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label for="threshold">Threshold <output id="thresholdOut" for="threshold">0.50</output></label>
+            <input type="range" id="threshold" min="0.1" max="0.9" step="0.01" value="0.5">
+          </div>
+          <div class="row">
+            <label for="contrast">Contrast <output id="contrastOut" for="contrast">1×</output></label>
+            <input type="range" id="contrast" min="0.4" max="3" step="0.05" value="1">
+          </div>
+          <label class="check"><input type="checkbox" id="invert"> Invert (light areas become stitches)</label>
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-states">
+        <h2 id="h-states"><span class="t">III. <b>States</b></span> <small id="cellCount">— cells</small></h2>
+        <div class="split" id="split" aria-hidden="true">
+          <div id="barS"></div><div id="barP"></div><div id="barB"></div>
+        </div>
+        <div class="share">
+          <label for="shareS"><span class="chip" id="chipS"></span>Stitched</label>
+          <input type="range" id="shareS" min="0" max="100" step="1" value="62">
+          <output id="shareSOut" for="shareS">62%</output>
+        </div>
+        <div class="share">
+          <label for="shareP"><span class="chip dot" id="chipP"></span>Punched</label>
+          <input type="range" id="shareP" min="0" max="100" step="1" value="23">
+          <output id="sharePOut" for="shareP">23%</output>
+        </div>
+        <div class="share">
+          <label for="shareB"><span class="chip" id="chipB"></span>Binary</label>
+          <input type="range" id="shareB" min="0" max="100" step="1" value="15">
+          <output id="shareBOut" for="shareB">15%</output>
+        </div>
+        <p class="note">Moving one slider rebalances the other two, so the three always add up to 100% of the pattern's cells.</p>
+        <div class="row">
+          <label for="origin">Binary starts at</label>
+          <select id="origin">
+            <option value="NE">Top-right corner</option>
+            <option value="NW">Top-left corner</option>
+            <option value="SE">Bottom-right corner</option>
+            <option value="SW">Bottom-left corner</option>
+            <option value="N">Top edge</option>
+            <option value="S">Bottom edge</option>
+            <option value="E">Right edge</option>
+            <option value="W">Left edge</option>
+            <option value="C">Centre</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="soft">Boundary dither <output id="softOut" for="soft">0.50</output></label>
+          <input type="range" id="soft" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <div class="row">
+          <label for="zeros">0s in the empty cells of the binary zone</label>
+          <select id="zeros">
+            <option value="near" selected>Only next to the pattern</option>
+            <option value="all">Fill the whole zone</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-marks">
+        <h2 id="h-marks"><span class="t">IV. <b>Marks</b></span></h2>
+        <div class="pair">
+          <div class="row">
+            <label for="stitchStyle">Stitched</label>
+            <select id="stitchStyle">
+              <option value="emboss" selected>Blind emboss</option>
+              <option value="square">Filled square</option>
+              <option value="cross">Cross stitch (flat)</option>
+              <option value="yarn">Cross stitch (yarn)</option>
+              <option value="penx">Pen: X</option>
+              <option value="penslash">Pen: slash</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="punchStyle">Punched</label>
+            <select id="punchStyle">
+              <option value="dot" selected>Filled dot</option>
+              <option value="ring">Pen: circle</option>
+              <option value="oval">Pen: tall oval</option>
+            </select>
+          </div>
+        </div>
+        <div class="pair">
+          <div class="row">
+            <label for="bitStyle">Binary</label>
+            <select id="bitStyle">
+              <option value="type" selected>Typeset digits</option>
+              <option value="pen">Pen: single-stroke</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="place">Placement</label>
+            <select id="place">
+              <option value="cells" selected>All in cells</option>
+              <option value="bits">Binary on intersections</option>
+              <option value="all">All on intersections</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-line">
+        <h2 id="h-line"><span class="t">V. <b>Line</b></span> <small>weights in pt</small></h2>
+        <div class="pair">
+          <div class="row">
+            <label for="gridStyle">Grid</label>
+            <select id="gridStyle">
+              <option value="lines" selected>Lines</option>
+              <option value="plus">Crosses at intersections</option>
+              <option value="dots">Dots at intersections</option>
+              <option value="linesdots">Lines and dots</option>
+              <option value="none">No grid</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="major">Heavier line every</label>
+            <select id="major">
+              <option value="8" selected>8 cells</option>
+              <option value="10">10 cells</option>
+              <option value="4">4 cells</option>
+              <option value="0">Never</option>
+            </select>
+          </div>
+        </div>
+        <div class="weights">
+          <label for="wGrid">Grid lines</label><input type="range" id="wGrid" min="0.1" max="1.5" step="0.05" value="0.45"><output id="wGridOut" for="wGrid">0.45</output>
+          <label for="wMajor">Heavy lines</label><input type="range" id="wMajor" min="0.1" max="2.5" step="0.05" value="0.75"><output id="wMajorOut" for="wMajor">0.75</output>
+          <label for="wDot">Grid dots</label><input type="range" id="wDot" min="0.3" max="4" step="0.05" value="1.4"><output id="wDotOut" for="wDot">1.40</output>
+          <label for="wStitch">Stitch pen</label><input type="range" id="wStitch" min="0.1" max="3" step="0.05" value="0.8"><output id="wStitchOut" for="wStitch">0.80</output>
+          <label for="wPunch">Punch pen</label><input type="range" id="wPunch" min="0.1" max="3" step="0.05" value="0.6"><output id="wPunchOut" for="wPunch">0.60</output>
+          <label for="wBit">Binary pen</label><input type="range" id="wBit" min="0.1" max="3" step="0.05" value="0.6"><output id="wBitOut" for="wBit">0.60</output>
+          <label for="wobble">Hand wobble</label><input type="range" id="wobble" min="0" max="1" step="0.05" value="0"><output id="wobbleOut" for="wobble">0.00</output>
+          <label for="inkVar">Ink and weight</label><input type="range" id="inkVar" min="0" max="1" step="0.05" value="0"><output id="inkVarOut" for="inkVar">0.00</output>
+        </div>
+        <p class="note">Wobble moves each stroke off true, grid included. Ink and weight varies how hard each stroke presses: its thickness and how much ink it leaves. Both apply to the grid, the marks, the key and the running line, and leave the title block untouched.</p>
+        <h3>Pen sets</h3>
+        <div class="presets" id="penPresets"></div>
+        <div class="saverow">
+          <input type="text" id="penName" placeholder="Name this pen set" aria-label="Pen set name">
+          <button type="button" id="penSave">Save pens</button>
+        </div>
+        <p class="note" id="penNote">A pen set keeps the grid style, the heavy-line spacing, all six weights, wobble and ink.</p>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-colour">
+        <h2 id="h-colour"><span class="t">VI. <b>Colour</b></span></h2>
+        <div class="presets" id="presets"></div>
+        <div class="saverow">
+          <input type="text" id="palName" placeholder="Name this palette" aria-label="Palette name">
+          <button type="button" id="palSave">Save colours</button>
+        </div>
+        <p class="note" id="palNote">Saved palettes stay with this page.</p>
+        <div class="swatches">
+          <div class="swatch"><input type="color" id="cPaper" value="#ffffff"><label for="cPaper">Paper</label></div>
+          <div class="swatch"><input type="color" id="cText" value="#111111"><label for="cText">Cover text</label></div>
+          <div class="swatch"><input type="color" id="cGrid" value="#e6e6e6"><label for="cGrid">Grid lines</label></div>
+          <div class="swatch"><input type="color" id="cMajor" value="#cfcfcf"><label for="cMajor">Heavy lines</label></div>
+          <div class="swatch"><input type="color" id="cDot" value="#bdbdbd"><label for="cDot">Grid dots</label></div>
+          <div class="swatch"><input type="color" id="cDotMajor" value="#9a9a9a"><label for="cDotMajor">Heavy dots</label></div>
+          <div class="swatch"><input type="color" id="cStitch" value="#c9c9c9"><label for="cStitch">Stitched</label></div>
+          <div class="swatch"><input type="color" id="cPunch" value="#8c8c8c"><label for="cPunch">Punched</label></div>
+          <div class="swatch"><input type="color" id="cBit" value="#111111"><label for="cBit">Binary 1s</label></div>
+          <div class="swatch"><input type="color" id="cZero" value="#c2c2c2"><label for="cZero">Binary 0s</label></div>
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-type">
+        <h2 id="h-type"><span class="t">VII. <b>Type</b></span></h2>
+        <div class="row"><label for="fDisplay">Name and title</label><select id="fDisplay"></select></div>
+        <div class="row"><label for="fText">Date, caption, key and running line</label><select id="fText"></select></div>
+        <div class="row"><label for="fBinary">Binary digits</label><select id="fBinary"></select></div>
+        <p class="note">Garamond and Neue Haas use your installed Adobe fonts when the browser can see them, and close stand-ins when it can't.</p>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-text">
+        <h2 id="h-text"><span class="t">VIII. <b>Cover text</b></span></h2>
+        <div class="pair">
+          <div class="row"><label for="tName">Name</label><input type="text" id="tName" value="Anna Geng"></div>
+          <div class="row"><label for="tTitle">Title</label><input type="text" id="tTitle" value="Portfolio"></div>
+        </div>
+        <div class="row"><label for="tCaption">Caption</label><textarea id="tCaption" rows="2" placeholder="Optional line under the illustration"></textarea></div>
+        <div class="row"><label for="tDate">Date</label><input type="text" id="tDate" value="2022 - 2026"></div>
+        <label class="drop" id="dropArt" for="artFile">
+          <input type="file" id="artFile" accept="image/*">
+          <strong>Add a cover illustration</strong>
+          <span id="artName">Optional. Sits between the title and the date, like the drawing on your current cover, and can be dithered into cells that follow the same states as the frame.</span>
+        </label>
+        <div id="artControls" class="hide" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="pair">
+            <div class="row">
+              <label for="artMode">Illustration as</label>
+              <select id="artMode">
+                <option value="cells" selected>Dithered into cells</option>
+                <option value="image">Drawn image</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="artAlgo">Conversion</label>
+              <select id="artAlgo">
+                <option value="floyd" selected>Floyd–Steinberg</option>
+                <option value="atkinson">Atkinson</option>
+                <option value="bayer">Ordered (Bayer 4×4)</option>
+                <option value="threshold">Threshold</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label for="artCols">Illustration grid <output id="artColsOut" for="artCols">48 columns</output></label>
+            <input type="range" id="artCols" min="12" max="140" step="2" value="48">
+          </div>
+          <div class="row">
+            <label for="artWidth">Illustration width <output id="artWidthOut" for="artWidth">180 pt</output></label>
+            <input type="range" id="artWidth" min="90" max="420" step="5" value="180">
+          </div>
+          <div class="row">
+            <label for="artThreshold">Threshold <output id="artThresholdOut" for="artThreshold">0.50</output></label>
+            <input type="range" id="artThreshold" min="0.1" max="0.9" step="0.01" value="0.5">
+          </div>
+          <div class="checks">
+            <label class="check"><input type="checkbox" id="artInvert"> Invert</label>
+            <label class="check"><input type="checkbox" id="artGrid" checked> Grid behind it</label>
+          </div>
+        </div>
+        <div class="row">
+          <label for="titleAlign">Title block alignment</label>
+          <select id="titleAlign">
+            <option value="center" selected>Centred</option>
+            <option value="left">Left, inside the frame</option>
+          </select>
+        </div>
+        <div class="pair">
+          <label class="check"><input type="checkbox" id="plate"> Name plate</label>
+          <div class="row">
+            <label for="plateRule" class="hide">Plate border</label>
+            <select id="plateRule" aria-label="Plate border">
+              <option value="double" selected>Double rule</option>
+              <option value="single">Single rule</option>
+              <option value="none">No rule, paper only</option>
+            </select>
+          </div>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="showTitle" checked> Title block</label>
+          <label class="check"><input type="checkbox" id="showArt" checked> Illustration</label>
+          <label class="check"><input type="checkbox" id="showLegend" checked> Key</label>
+          <label class="check"><input type="checkbox" id="showFooter" checked> Running line + formulas</label>
+          <label class="check"><input type="checkbox" id="showHoles"> Tractor-feed holes</label>
+        </div>
+        <h3>Italic</h3>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="iName"> Name</label>
+          <label class="check"><input type="checkbox" id="iTitle" checked> Title</label>
+          <label class="check"><input type="checkbox" id="iCaption"> Caption</label>
+          <label class="check"><input type="checkbox" id="iDate"> Date</label>
+          <label class="check"><input type="checkbox" id="iKey"> Key</label>
+          <label class="check"><input type="checkbox" id="iRun"> Running line</label>
+        </div>
+      </section>
+
+      <section class="sheet" aria-labelledby="h-export">
+        <h2 id="h-export"><span class="t">IX. <b>Export</b></span></h2>
+        <div class="exports" id="exports">
+          <button type="button" class="primary" id="exPng">PNG · 300 dpi</button>
+          <button type="button" id="exSvg">SVG (vector)</button>
+          <button type="button" id="exTxt">Stitch chart (.txt)</button>
+        </div>
+        <p class="note" id="exportNote">The SVG is sized to the paper and keeps every mark as its own shape, for a pen plotter, an embossing die or a laser cutter. The chart lists each row cell by cell for stitching or punching by hand.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var PX = 96; // CSS px per inch
+  var BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+  var SIZES = { letter: [8.5, 11], legal: [8.5, 14], tabloid: [11, 17], a4: [210 / 25.4, 297 / 25.4], a3: [297 / 25.4, 420 / 25.4], square: [8.5, 8.5] };
+  var SIZE_NAME = { letter: "Letter", legal: "Legal", tabloid: "Tabloid", a4: "A4", a3: "A3", square: "Square", custom: "Custom" };
+  var COLOUR_KEYS = ["cPaper", "cText", "cGrid", "cMajor", "cDot", "cDotMajor", "cStitch", "cPunch", "cBit", "cZero"];
+  var PRESETS = [
+    { name: "Portfolio", c: { cPaper: "#ffffff", cText: "#111111", cGrid: "#e6e6e6", cMajor: "#cfcfcf", cDot: "#bdbdbd", cDotMajor: "#9a9a9a", cStitch: "#c9c9c9", cPunch: "#8c8c8c", cBit: "#111111", cZero: "#c2c2c2" } },
+    { name: "Plotter", c: { cPaper: "#ffffff", cText: "#161616", cGrid: "#8a8a8a", cMajor: "#8a8a8a", cDot: "#5a5a5a", cDotMajor: "#2a2a2a", cStitch: "#5a5a5a", cPunch: "#7a7a7a", cBit: "#1a1a1a", cZero: "#9a9a9a" } },
+    { name: "Madder", c: { cPaper: "#efe8e3", cText: "#2e2a29", cGrid: "#ddd0cb", cMajor: "#c8b6b0", cDot: "#b9a39d", cDotMajor: "#8f2a36", cStitch: "#8f2a36", cPunch: "#2e2a29", cBit: "#2e2a29", cZero: "#aa9d97" } },
+    { name: "Indigo", c: { cPaper: "#edf0f0", cText: "#1d2330", cGrid: "#cfd7da", cMajor: "#b5c1c6", cDot: "#9eacb4", cDotMajor: "#2f4a7a", cStitch: "#2f4a7a", cPunch: "#1d2330", cBit: "#1d2330", cZero: "#98a2ad" } },
+    { name: "Carbon copy", c: { cPaper: "#ebeae6", cText: "#1b1a18", cGrid: "#d6d3cc", cMajor: "#c0bcb3", cDot: "#aaa69d", cDotMajor: "#6f6b64", cStitch: "#3b3834", cPunch: "#1b1a18", cBit: "#1b1a18", cZero: "#a09c94" } },
+    { name: "Blueprint", c: { cPaper: "#1e3a62", cText: "#ffffff", cGrid: "#2f5080", cMajor: "#4a6c9a", cDot: "#7f9cc4", cDotMajor: "#c9d6e8", cStitch: "#e7edf5", cPunch: "#e7edf5", cBit: "#ffffff", cZero: "#7e97b9" } }
+  ];
+  var G_SERIF = '"Adobe Garamond Pro", "EB Garamond", Garamond, Georgia, serif';
+  var G_SANS = '"Neue Haas Grotesk Display Pro", "Neue Haas Unica", "Helvetica Neue", Helvetica, Arimo, Arial, sans-serif';
+  // Each face: stack, and the weights used for display / regular / bold / light roles.
+  var FONTS = {
+    garamond: { label: "Garamond (Adobe Garamond Pro)", stack: G_SERIF, disp: 600, reg: 400, bold: 700, light: 400 },
+    haas: { label: "Neue Haas Grotesk / Helvetica", stack: G_SANS, disp: 500, reg: 400, bold: 700, light: 200, thin: 300 },
+    bodoni: { label: "Bodoni Moda", stack: '"Bodoni Moda", Didot, "Bodoni 72", serif', disp: 600, reg: 400, bold: 700, light: 400 },
+    instrument: { label: "Instrument Serif", stack: '"Instrument Serif", Georgia, serif', disp: 400, reg: 400, bold: 400, light: 400 },
+    schibsted: { label: "Schibsted Grotesk", stack: '"Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif', disp: 600, reg: 400, bold: 700, light: 400 },
+    plex: { label: "IBM Plex Mono", stack: '"IBM Plex Mono", ui-monospace, Menlo, monospace', disp: 500, reg: 400, bold: 500, light: 300 },
+    courier: { label: "Courier Prime", stack: '"Courier Prime", "Courier New", monospace', disp: 700, reg: 400, bold: 700, light: 400 }
+  };
+  var ORIGIN_LABEL = { NE: "NE", NW: "NW", SE: "SE", SW: "SW", N: "N edge", S: "S edge", E: "E edge", W: "W edge", C: "centre" };
+  var ALGO_LABEL = { floyd: "Floyd–Steinberg (7,3,5,1)/16", atkinson: "Atkinson 1/8 ×6", bayer: "Bayer 4×4", threshold: "threshold" };
+  var FRAME_FORMULA = {
+    sampler: "band t = ±2.4 sin(2πs/12) · star S(4,6) ∖ S(2,3), S(a,b) = max(|u|,|v|) ≤ a ∪ |u|+|v| ≤ b · medallion r = 1.8 + 5|cos 2.5φ| · lace |ρ − 3.4| < ½",
+    minimal: "rosette r = 1.3 + 3.3|cos 2(θ − π/4)| · vine t = 7 + 1.5 sin(2π(s − 12)/12), leaves u²/2.3 + v²/0.42 < 1 · flower r = 0.9 + 3.1|cos 2.5φ| · bud |dx| + |dy| = 3"
+  };
+  var FRAME_INSET = { sampler: 19, minimal: 13 };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { shares: { S: 62, P: 23, B: 15 }, image: null, imageName: "", art: null, artUrl: "" };
+  function val(id) { return $(id).value; }
+  function num(id) { return parseFloat($(id).value); }
+  function on(id) { return $(id).checked; }
+  function radio(name) { var r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : ""; }
+  function source() { return radio("source") || "frame"; }
+
+  // ---------- paper + grid geometry (all in CSS px, 96 per inch) ----------
+  function paperInches() {
+    var k = val("size"), wi, hi;
+    if (k === "custom") {
+      var f = val("cu") === "mm" ? 1 / 25.4 : 1;
+      wi = Math.max(1, (num("cw") || 1) * f); hi = Math.max(1, (num("ch") || 1) * f);
+    } else { wi = SIZES[k][0]; hi = SIZES[k][1]; }
+    var land = radio("orient") === "landscape";
+    if ((land && wi < hi) || (!land && wi > hi)) { var t = wi; wi = hi; hi = t; }
+    return { wi: wi, hi: hi };
+  }
+  function geom() {
+    var p = paperInches(), W = Math.round(p.wi * PX), H = Math.round(p.hi * PX);
+    var m = Math.min(num("margin") * PX, Math.min(W, H) / 2 - 40);
+    var fr = on("showFooter") ? Math.round(56 * W / 612) : 0;
+    var cols = parseInt(val("cols"), 10), gw = W - 2 * m, cell = gw / cols;
+    var avail = H - 2 * m - fr, rows = Math.max(1, Math.floor(avail / cell + 1e-6));
+    var gh = rows * cell, gy = m + (avail - gh) / 2;
+    return { W: W, H: H, wi: p.wi, hi: p.hi, m: m, gx: m, gy: gy, gw: gw, gh: gh, cols: cols, rows: rows, cell: cell };
+  }
+
+  // ---------- the minimal frame ----------
+  function minimalMask(C, R) {
+    var M = new Uint8Array(C * R), hx = (C - 1) / 2, hy = (R - 1) / 2, TAU = Math.PI * 2;
+    function vine(s, t, lim) {
+      if (s < 12 || s > lim + 2) return 0;
+      var w = function (q) { return 7 + 1.5 * Math.sin(TAU * (q - 12) / 12); };
+      if (s <= lim && Math.abs(t - w(s)) < 0.55) return 1;
+      for (var k = 0; k * 12 + 15 <= lim; k++) {
+        var cs = 12 + k * 12 + 3, ct = w(cs) - 2.1, u = ((s - cs) + (t - ct)) / Math.SQRT2, v = ((s - cs) - (t - ct)) / Math.SQRT2;
+        if ((u * u) / 2.3 + (v * v) / 0.42 < 1) return 1;
+        var cs2 = cs + 6, ct2 = w(cs2) + 2.1, u2 = ((s - cs2) - (t - ct2)) / Math.SQRT2, v2 = ((s - cs2) + (t - ct2)) / Math.SQRT2;
+        if (cs2 <= lim && (u2 * u2) / 2.3 + (v2 * v2) / 0.42 < 1) return 1;
+      }
+      if (Math.hypot(s - (lim + 1.2), t - w(lim + 1.2)) < 1.25) return 1;
+      return 0;
+    }
+    var limX = Math.min(Math.floor(hx) - 9, 28), limY = Math.min(Math.floor(hy) - 8, 34);
+    for (var y = 0; y < R; y++) for (var x = 0; x < C; x++) {
+      var qx = Math.min(x, C - 1 - x), qy = Math.min(y, R - 1 - y), d = Math.min(qx, qy), o = 0;
+      if (d === 1) o = 1;
+      if (d === 3 && (qx + qy) % 2 === 0) o = 1;
+      if (qy <= 11 && vine(qx, qy, limX)) o = 1;
+      if (qx <= 11 && vine(qy, qx, limY)) o = 1;
+      var cx = qx - 7, cy = qy - 7, rho = Math.hypot(cx, cy), th = Math.atan2(cy, cx);
+      var rr = 1.3 + 3.3 * Math.abs(Math.cos(2 * (th - Math.PI / 4)));
+      if (rho < 5.4 && d >= 2) o = 0;
+      if (rho < rr + 0.3 && !(rho > 0.7 && rho < 1.5)) o = 1;
+      var tx = x - hx, ty = qy - 6.5, tr = Math.hypot(tx, ty);
+      if (tr < 5.2) { if (d >= 2) o = 0; var ph2 = Math.atan2(Math.abs(tx), ty), pr = 0.9 + 3.1 * Math.abs(Math.cos(2.5 * ph2)); if (tr < pr + 0.3 && !(tr > 0.6 && tr < 1.4)) o = 1; }
+      var lm = Math.abs(qx - 6.5) + Math.abs(y - hy);
+      if (lm < 4.5) { if (d >= 2) o = 0; if (Math.abs(lm - 3) < 0.55 || lm < 0.8) o = 1; }
+      M[y * C + x] = o;
+    }
+    return M;
+  }
+  function frameFor(C, R) { return val("frameStyle") === "sampler" ? frameMask(C, R) : minimalMask(C, R); }
+
+  // ---------- the frame, derived ----------
+  function frameMask(C, R) {
+    var M = new Uint8Array(C * R), TAU = Math.PI * 2, hx = (C - 1) / 2, hy = (R - 1) / 2;
+    for (var y = 0; y < R; y++) for (var x = 0; x < C; x++) {
+      var qx = Math.min(x, C - 1 - x), qy = Math.min(y, R - 1 - y), d = Math.min(qx, qy);
+      var s = qy <= qx ? x - hx : y - hy, o = 0;
+      if (d === 0 || d === 2 || d === 10) o = 1;
+      if (d >= 3 && d <= 9) {
+        var t = d - 6, w = 2.4 * Math.sin(TAU * s / 12);
+        if (Math.abs(t - w) < 0.62 || Math.abs(t + w) < 0.62) o = 1;
+        if (Math.abs(t) < 0.5 && Math.abs(Math.sin(TAU * s / 12)) > 0.93) o = 1;
+      }
+      if (d === 12 && (x + y) % 2 === 0) o = 1;
+      if (d >= 13 && d <= 17) {
+        var k = Math.round(s / 8) * 8, rr = Math.hypot(s - k, d - 12.5);
+        if (Math.abs(rr - 3.4) < 0.55) o = 1;
+        if (Math.abs(s - k) < 0.6 && d === 15) o = 1;
+      }
+      if (qx <= 15 && qy <= 15) {
+        o = (d === 0 || d === 2 || ((qx === 15 || qy === 15) && d >= 2)) ? 1 : 0;
+        var u = Math.abs(qx - 8.5), v = Math.abs(qy - 8.5);
+        var outer = Math.max(u, v) <= 4 || u + v <= 6, inner = Math.max(u, v) <= 2 || u + v <= 3;
+        if (outer && !inner) o = 1;
+        if (u + v <= 1) o = 1;
+      }
+      var tx = x - hx, ty = qy - 8, tr = Math.hypot(tx, ty);
+      if (tr < 9.4) {
+        var ph = Math.atan2(Math.abs(tx), ty), pr = 1.8 + 5 * Math.abs(Math.cos(2.5 * ph));
+        if (d >= 1) o = 0;
+        if (Math.abs(tr - 8.6) < 0.55) o = 1;
+        if (tr < pr && !(tr > 1.1 && tr < 2.3)) o = 1;
+      }
+      var lm = Math.abs(qx - 6) + Math.abs(y - hy);
+      if (lm < 7) {
+        if (lm < 6.6 && d >= 1) o = 0;
+        if (Math.abs(lm - 5.5) < 0.6 || Math.abs(lm - 3) < 0.6 || lm < 0.6) o = 1;
+      }
+      M[y * C + x] = o;
+    }
+    return M;
+  }
+
+  // ---------- an uploaded image, converted to cells ----------
+  function imageMask(img, w, h, opts) {
+    var M = new Uint8Array(w * h);
+    if (!img || w < 1 || h < 1) return M;
+    var SS = 4, cw = w * SS, ch = h * SS;
+    var cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
+    var cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.fillStyle = "#ffffff"; cx.fillRect(0, 0, cw, ch);
+    var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    var sc = opts.fit === "cover" ? Math.max(cw / iw, ch / ih) : Math.min(cw / iw, ch / ih);
+    var dw = iw * sc, dh = ih * sc, dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(img, dx, dy, dw, dh);
+    var px = cx.getImageData(0, 0, cw, ch).data;
+    var ink = new Float32Array(w * h), inside = new Uint8Array(w * h);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var sum = 0;
+      for (var j = 0; j < SS; j++) for (var i = 0; i < SS; i++) {
+        var p = ((y * SS + j) * cw + (x * SS + i)) * 4;
+        sum += (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
+      }
+      var a = 1 - sum / (SS * SS);
+      if (opts.invert) a = 1 - a;
+      a = (a - 0.5) * opts.contrast + 0.5;
+      ink[y * w + x] = Math.max(0, Math.min(1, a));
+      var mx = (x + 0.5) * SS, my = (y + 0.5) * SS;
+      inside[y * w + x] = (mx >= dx && mx <= dx + dw && my >= dy && my <= dy + dh) ? 1 : 0;
+    }
+    var t = opts.threshold;
+    if (opts.algo === "threshold") {
+      for (var n = 0; n < ink.length; n++) M[n] = ink[n] >= t ? 1 : 0;
+    } else if (opts.algo === "bayer") {
+      for (var yy = 0; yy < h; yy++) for (var xx = 0; xx < w; xx++) {
+        var b = (BAYER[yy % 4][xx % 4] + 0.5) / 16 - 0.5;
+        M[yy * w + xx] = ink[yy * w + xx] + (0.5 - t) >= 0.5 + b ? 1 : 0;
+      }
+    } else {
+      var e = Float32Array.from(ink);
+      var taps = opts.algo === "atkinson"
+        ? [[1, 0, 1 / 8], [2, 0, 1 / 8], [-1, 1, 1 / 8], [0, 1, 1 / 8], [1, 1, 1 / 8], [0, 2, 1 / 8]]
+        : [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]];
+      for (var y2 = 0; y2 < h; y2++) for (var x2 = 0; x2 < w; x2++) {
+        var idx = y2 * w + x2, vv = e[idx], q = vv >= t ? 1 : 0, err = vv - q;
+        M[idx] = q;
+        for (var k = 0; k < taps.length; k++) {
+          var nx = x2 + taps[k][0], ny = y2 + taps[k][1];
+          if (nx >= 0 && nx < w && ny < h) e[ny * w + nx] += err * taps[k][2];
+        }
+      }
+    }
+    for (var m = 0; m < M.length; m++) if (!inside[m]) M[m] = 0;
+    return M;
+  }
+
+  var baseCache = { key: "", mask: null };
+  function baseMask(G) {
+    var src = source(), hasImg = !!state.image && src !== "frame";
+    var key = [src, val("frameStyle"), G.cols, G.rows, hasImg ? state.imageName + "|" + val("algo") + "|" + val("fit") + "|" + val("threshold") + "|" + val("contrast") + "|" + on("invert") : ""].join("#");
+    if (baseCache.key === key) return baseCache.mask;
+    var C = G.cols, R = G.rows, M;
+    var opts = { algo: val("algo"), fit: val("fit"), threshold: num("threshold"), contrast: num("contrast"), invert: on("invert") };
+    if (src === "image" && state.image) M = imageMask(state.image, C, R, opts);
+    else {
+      M = frameFor(C, R);
+      var ins = FRAME_INSET[val("frameStyle")] || 19;
+      if (src === "both" && state.image) {
+        var w = C - 2 * ins, h = R - 2 * ins;
+        if (w > 0 && h > 0) {
+          var I = imageMask(state.image, w, h, opts);
+          for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) if (I[y * w + x]) M[(y + ins) * C + (x + ins)] = 1;
+        }
+      }
+    }
+    baseCache = { key: key, mask: M };
+    return M;
+  }
+
+  // ---------- states: rank filled cells by distance from the origin, split by the shares ----------
+  function computeStates(G) { return statesOf(baseMask(G), G.cols, G.rows); }
+  function statesOf(M, C, R) {
+    var N = C * R;
+    var o = val("origin"), soft = num("soft");
+    var keys = new Float32Array(N), maxd = 0;
+    for (var y = 0; y < R; y++) for (var x = 0; x < C; x++) {
+      var dd;
+      switch (o) {
+        case "NE": dd = Math.hypot(C - 1 - x, y); break;
+        case "NW": dd = Math.hypot(x, y); break;
+        case "SE": dd = Math.hypot(C - 1 - x, R - 1 - y); break;
+        case "SW": dd = Math.hypot(x, R - 1 - y); break;
+        case "N": dd = y; break;
+        case "S": dd = R - 1 - y; break;
+        case "E": dd = C - 1 - x; break;
+        case "W": dd = x; break;
+        default: dd = Math.hypot(x - (C - 1) / 2, y - (R - 1) / 2);
+      }
+      keys[y * C + x] = dd; if (dd > maxd) maxd = dd;
+    }
+    var amp = 0.35 * soft;
+    for (var yy = 0; yy < R; yy++) for (var xx = 0; xx < C; xx++) {
+      var n = yy * C + xx;
+      keys[n] = keys[n] / (maxd || 1) + amp * (BAYER[yy % 4][xx % 4] / 15 - 0.5);
+    }
+    var filled = [];
+    for (var i = 0; i < N; i++) if (M[i]) filled.push(i);
+    filled.sort(function (a, b) { return keys[a] - keys[b]; });
+    var total = filled.length;
+    var nB = Math.round(total * state.shares.B / 100), nP = Math.round(total * state.shares.P / 100);
+    if (nB + nP > total) nP = total - nB;
+    var S = new Uint8Array(N); // 0 empty, 1 stitch, 2 punch, 3 one, 4 zero
+    for (var r = 0; r < total; r++) S[filled[r]] = r < nB ? 3 : (r < nB + nP ? 2 : 1);
+    var zeros = 0;
+    var zm = val("zeros");
+    if (zm !== "none" && nB > 0) {
+      var kB = keys[filled[nB - 1]];
+      var near = function (i) { var zx = i % C, zy = (i - zx) / C; for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) { var ax = zx + dx, ay = zy + dy; if (ax >= 0 && ax < C && ay >= 0 && ay < R && M[ay * C + ax]) return true; } return false; };
+      for (var z = 0; z < N; z++) if (!M[z] && keys[z] <= kB && (zm === "all" || near(z))) { S[z] = 4; zeros++; }
+    }
+    return { S: S, total: total, nB: nB, nP: nP, nS: total - nB - nP, zeros: zeros };
+  }
+
+  // ---------- yarn: a cross stitch modelled as two legs of two-ply floss ----------
+  // Unit cell 0..1. Bottom leg "/" first, top leg "\" over it; each leg is two plies that bow apart
+  // mid-stitch and pinch into the needle holes; plies carry cylindrical shading, an S-twist and a
+  // top-left highlight; each leg casts a soft shadow on what lies beneath.
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var yarnModels = {};
+  function yarnModel(v) {
+    if (yarnModels[v]) return yarnModels[v];
+    var r = rng(v * 7919 + 17), j = function (a) { return (r() - 0.5) * a; };
+    var A = 0.1, B = 0.9, legs = [[A + j(0.03), B + j(0.03), B + j(0.03), A + j(0.03)], [A + j(0.03), A + j(0.03), B + j(0.03), B + j(0.03)]];
+    var L = [-Math.SQRT1_2, -Math.SQRT1_2], TW = 58 * Math.PI / 180, out = { holes: [[A, A], [B, A], [A, B], [B, B]], legs: [] };
+    legs.forEach(function (g) {
+      var p0 = [g[0], g[1]], p1 = [g[2], g[3]], dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy);
+      var u = [dx / len, dy / len], n = [-u[1], u[0]], sg = (n[0] * L[0] + n[1] * L[1]) >= 0 ? 1 : -1, nl = [n[0] * sg, n[1] * sg];
+      var mid = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2], leg = { shadow: [p0, p1], plies: [] };
+      [-1, 1].forEach(function (side) {
+        var o = side * 0.058 * (1 + j(0.3)), w = 0.13 * (1 + j(0.12));
+        var P0 = [p0[0] + n[0] * o * 0.3, p0[1] + n[1] * o * 0.3], Cc = [mid[0] + n[0] * o * 1.55, mid[1] + n[1] * o * 1.55], P1 = [p1[0] + n[0] * o * 0.3, p1[1] + n[1] * o * 0.3];
+        var bz = function (t) { var a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t; return [a * P0[0] + b * Cc[0] + c * P1[0], a * P0[1] + b * Cc[1] + c * P1[1]]; };
+        var tg = function (t) { var x = 2 * (1 - t) * (Cc[0] - P0[0]) + 2 * t * (P1[0] - Cc[0]), y = 2 * (1 - t) * (Cc[1] - P0[1]) + 2 * t * (P1[1] - Cc[1]), h = Math.hypot(x, y); return [x / h, y / h]; };
+        var pts = [], hi = [], stripes = [];
+        for (var i = 0; i <= 16; i++) pts.push(bz(i / 16));
+        for (var t = 0.16; t <= 0.841; t += 0.057) { var q = bz(t); hi.push([q[0] + nl[0] * w * 0.22, q[1] + nl[1] * w * 0.22]); }
+        var hh = (w / 2) / Math.sin(TW) * 0.86, ph = r() * 0.08;
+        for (var s = 0.12 + ph; s < 0.88; s += 0.082) {
+          var c0 = bz(s), T = tg(s), d = [T[0] * Math.cos(TW) - T[1] * Math.sin(TW), T[0] * Math.sin(TW) + T[1] * Math.cos(TW)];
+          stripes.push([[c0[0] - d[0] * hh, c0[1] - d[1] * hh], [c0[0] + d[0] * hh, c0[1] + d[1] * hh]]);
+        }
+        var M = bz(0.5);
+        leg.plies.push({ pts: pts, w: w, hi: hi, stripes: stripes, g0: [M[0] - nl[0] * w / 2, M[1] - nl[1] * w / 2], g1: [M[0] + nl[0] * w / 2, M[1] + nl[1] * w / 2] });
+      });
+      out.legs.push(leg);
+    });
+    yarnModels[v] = out;
+    return out;
+  }
+  function shade(hex, t) { return t >= 0 ? mix(hex, "#ffffff", t) : mix(hex, "#000000", -t); }
+  function yarnTones(c, paper) { return { dark: shade(c, -0.42), mid: c, light: shade(c, 0.3), edge: shade(c, -0.12), twist: shade(c, -0.5), shine: shade(c, 0.55), hole: mix(paper, "#000000", 0.22) }; }
+  var YARN_PAD = 0.12, spriteCache = {}, spriteCount = 0;
+  function yarnSprite(S, col, paper, v) {
+    var key = Math.round(S * 4) + col + paper + v;
+    if (spriteCache[key]) return spriteCache[key];
+    if (spriteCount > 64) { spriteCache = {}; spriteCount = 0; }
+    var side = Math.max(2, Math.ceil(S * (1 + 2 * YARN_PAD))), c = document.createElement("canvas");
+    c.width = c.height = side;
+    var x = c.getContext("2d"), o = S * YARN_PAD, m = yarnModel(v), tn = yarnTones(col, paper);
+    var X = function (p) { return [o + p[0] * S, o + p[1] * S]; };
+    var poly = function (pts) { x.beginPath(); pts.forEach(function (p, i) { var q = X(p); if (i) x.lineTo(q[0], q[1]); else x.moveTo(q[0], q[1]); }); };
+    x.fillStyle = tn.hole;
+    m.holes.forEach(function (h) { var q = X(h); x.beginPath(); x.arc(q[0], q[1], S * 0.048, 0, Math.PI * 2); x.fill(); });
+    x.lineCap = "round"; x.lineJoin = "round";
+    m.legs.forEach(function (leg) {
+      x.save();
+      x.shadowColor = "rgba(0,0,0,0.34)"; x.shadowBlur = S * 0.06; x.shadowOffsetX = S * 0.018; x.shadowOffsetY = S * 0.032;
+      x.strokeStyle = tn.dark; x.lineWidth = S * 0.25; poly(leg.shadow); x.stroke();
+      x.restore();
+      leg.plies.forEach(function (p) {
+        var a = X(p.g0), b = X(p.g1), gr = x.createLinearGradient(a[0], a[1], b[0], b[1]);
+        gr.addColorStop(0, tn.dark); gr.addColorStop(0.42, tn.mid); gr.addColorStop(0.74, tn.light); gr.addColorStop(1, tn.edge);
+        x.strokeStyle = gr; x.lineWidth = p.w * S; poly(p.pts); x.stroke();
+        x.strokeStyle = tn.twist; x.globalAlpha = 0.42; x.lineWidth = Math.max(0.5, p.w * S * 0.24); x.lineCap = "butt";
+        x.beginPath(); p.stripes.forEach(function (sg) { var q0 = X(sg[0]), q1 = X(sg[1]); x.moveTo(q0[0], q0[1]); x.lineTo(q1[0], q1[1]); }); x.stroke();
+        x.lineCap = "round"; x.strokeStyle = tn.shine; x.globalAlpha = 0.5; x.lineWidth = Math.max(0.4, p.w * S * 0.16); poly(p.hi); x.stroke();
+        x.globalAlpha = 1;
+      });
+    });
+    spriteCache[key] = c; spriteCount++;
+    return c;
+  }
+  function yarnVariant(x, y) { return (x * 7 + y * 13 + ((x * y) % 5)) & 3; }
+
+  // ---------- painters: one drawing routine, two backends ----------
+  var measureCtx = document.createElement("canvas").getContext("2d");
+  function fontStr(o) { return (o.style || "normal") + " " + (o.weight || 400) + " " + o.size + "px " + o.family; }
+  function measure(s, o) { measureCtx.font = fontStr(o); return measureCtx.measureText(s).width + (o.ls || 0) * Math.max(0, s.length - 1); }
+
+  function CanvasPainter(ctx, scale) { this.c = ctx; this.s = scale || 1; }
+  CanvasPainter.prototype = {
+    rect: function (x, y, w, h, f, a) { var c = this.c; c.globalAlpha = a == null ? 1 : a; c.fillStyle = f; c.fillRect(x, y, w, h); c.globalAlpha = 1; },
+    frame: function (x, y, w, h, s, lw, a) { var c = this.c; c.globalAlpha = a == null ? 1 : a; c.strokeStyle = s; c.lineWidth = lw; c.setLineDash([]); c.strokeRect(x, y, w, h); c.globalAlpha = 1; },
+    line: function (x1, y1, x2, y2, s, lw, a, dash, cap) { var c = this.c; c.globalAlpha = a == null ? 1 : a; c.strokeStyle = s; c.lineWidth = lw; c.lineCap = cap || "butt"; c.setLineDash(dash || []); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); c.setLineDash([]); c.globalAlpha = 1; },
+    circle: function (x, y, r, f, a) { var c = this.c; c.globalAlpha = a == null ? 1 : a; c.fillStyle = f; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1; },
+    ring: function (x, y, rx, ry, s, lw, a, rot) { var c = this.c; c.globalAlpha = a == null ? 1 : a; c.strokeStyle = s; c.lineWidth = lw; c.setLineDash([]); c.beginPath(); c.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2); c.stroke(); c.globalAlpha = 1; },
+    image: function (im, x, y, w, h) { if (im && im.img) this.c.drawImage(im.img, x, y, w, h); },
+    yarn: function (x, y, cell, col, paper, v, a) {
+      var sp = yarnSprite(cell * this.s, col, paper, v), p = cell * YARN_PAD;
+      this.c.globalAlpha = a == null ? 1 : a;
+      this.c.drawImage(sp, x - p, y - p, cell + 2 * p, cell + 2 * p);
+      this.c.globalAlpha = 1;
+    },
+    text: function (s, x, y, o) {
+      var c = this.c; c.font = fontStr(o); c.fillStyle = o.fill; c.globalAlpha = o.alpha == null ? 1 : o.alpha;
+      c.textBaseline = o.baseline || "alphabetic";
+      var ls = o.ls || 0, wdt = measure(s, o);
+      var sx = o.align === "center" ? x - wdt / 2 : (o.align === "right" ? x - wdt : x);
+      c.textAlign = "left";
+      if ("letterSpacing" in c) { c.letterSpacing = ls + "px"; c.fillText(s, sx, y); c.letterSpacing = "0px"; }
+      else if (!ls) c.fillText(s, sx, y);
+      else { var cx = sx; for (var i = 0; i < s.length; i++) { c.fillText(s[i], cx, y); cx += c.measureText(s[i]).width + ls; } }
+      c.globalAlpha = 1;
+    }
+  };
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function r2(n) { return Math.round(n * 100) / 100; }
+  function r4(n) { return Math.round(n * 10000) / 10000; }
+  function SvgPainter() { this.p = []; this.defs = []; this.yarnIds = {}; }
+  SvgPainter.prototype = {
+    op: function (a) { return a == null || a === 1 ? "" : ' opacity="' + r2(a) + '"'; },
+    rect: function (x, y, w, h, f, a) { this.p.push('<rect x="' + r2(x) + '" y="' + r2(y) + '" width="' + r2(w) + '" height="' + r2(h) + '" fill="' + f + '"' + this.op(a) + "/>"); },
+    frame: function (x, y, w, h, s, lw, a) { this.p.push('<rect x="' + r2(x) + '" y="' + r2(y) + '" width="' + r2(w) + '" height="' + r2(h) + '" fill="none" stroke="' + s + '" stroke-width="' + r2(lw) + '"' + this.op(a) + "/>"); },
+    line: function (x1, y1, x2, y2, s, lw, a, dash, cap) { this.p.push('<line x1="' + r2(x1) + '" y1="' + r2(y1) + '" x2="' + r2(x2) + '" y2="' + r2(y2) + '" stroke="' + s + '" stroke-width="' + r2(lw) + '"' + (dash ? ' stroke-dasharray="' + dash.join(" ") + '"' : "") + (cap ? ' stroke-linecap="' + cap + '"' : "") + this.op(a) + "/>"); },
+    circle: function (x, y, r, f, a) { this.p.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="' + r2(r) + '" fill="' + f + '"' + this.op(a) + "/>"); },
+    ring: function (x, y, rx, ry, s, lw, a, rot) { this.p.push('<ellipse cx="' + r2(x) + '" cy="' + r2(y) + '" rx="' + r2(rx) + '" ry="' + r2(ry) + '"' + (rot ? ' transform="rotate(' + r2(rot * 180 / Math.PI) + " " + r2(x) + " " + r2(y) + ')"' : "") + ' fill="none" stroke="' + s + '" stroke-width="' + r2(lw) + '"' + this.op(a) + "/>"); },
+    image: function (im, x, y, w, h) { if (im && im.url) this.p.push('<image href="' + im.url + '" x="' + r2(x) + '" y="' + r2(y) + '" width="' + r2(w) + '" height="' + r2(h) + '" preserveAspectRatio="xMidYMid meet"/>'); },
+    yarnDef: function (col, paper, v) {
+      var id = "y" + col.slice(1) + paper.slice(1) + "v" + v;
+      if (this.yarnIds[id]) return id;
+      if (!this.yarnIds.__filter) { this.defs.push('<filter id="ysh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="0.025"/></filter>'); this.yarnIds.__filter = 1; }
+      var m = yarnModel(v), tn = yarnTones(col, paper), g = ['<g id="' + id + '">'], pl = function (pts) { return pts.map(function (p) { return r4(p[0]) + "," + r4(p[1]); }).join(" "); };
+      m.holes.forEach(function (h) { g.push('<circle cx="' + h[0] + '" cy="' + h[1] + '" r="0.048" fill="' + tn.hole + '"/>'); });
+      var defs = this.defs;
+      m.legs.forEach(function (leg, li) {
+        g.push('<line x1="' + r4(leg.shadow[0][0]) + '" y1="' + r4(leg.shadow[0][1]) + '" x2="' + r4(leg.shadow[1][0]) + '" y2="' + r4(leg.shadow[1][1]) + '" stroke="#000" stroke-opacity="0.32" stroke-width="0.25" stroke-linecap="round" transform="translate(0.018 0.032)" filter="url(#ysh)"/>');
+        leg.plies.forEach(function (p, pi) {
+          var gid = id + "g" + li + pi;
+          defs.push('<linearGradient id="' + gid + '" gradientUnits="userSpaceOnUse" x1="' + r4(p.g0[0]) + '" y1="' + r4(p.g0[1]) + '" x2="' + r4(p.g1[0]) + '" y2="' + r4(p.g1[1]) + '"><stop offset="0" stop-color="' + tn.dark + '"/><stop offset="0.42" stop-color="' + tn.mid + '"/><stop offset="0.74" stop-color="' + tn.light + '"/><stop offset="1" stop-color="' + tn.edge + '"/></linearGradient>');
+          g.push('<polyline points="' + pl(p.pts) + '" fill="none" stroke="url(#' + gid + ')" stroke-width="' + r4(p.w) + '" stroke-linecap="round" stroke-linejoin="round"/>');
+          g.push('<path d="' + p.stripes.map(function (s) { return "M" + r4(s[0][0]) + " " + r4(s[0][1]) + "L" + r4(s[1][0]) + " " + r4(s[1][1]); }).join("") + '" stroke="' + tn.twist + '" stroke-opacity="0.42" stroke-width="' + r4(p.w * 0.24) + '"/>');
+          g.push('<polyline points="' + pl(p.hi) + '" fill="none" stroke="' + tn.shine + '" stroke-opacity="0.5" stroke-width="' + r4(p.w * 0.16) + '" stroke-linecap="round"/>');
+        });
+      });
+      g.push("</g>");
+      this.defs.push(g.join(""));
+      this.yarnIds[id] = 1;
+      return id;
+    },
+    yarn: function (x, y, cell, col, paper, v, a) {
+      var id = this.yarnDef(col, paper, v);
+      this.p.push('<use href="#' + id + '" transform="translate(' + r2(x) + " " + r2(y) + ") scale(" + r4(cell) + ')"' + this.op(a) + '/>');
+    },
+    text: function (s, x, y, o) {
+      var anchor = o.align === "center" ? "middle" : (o.align === "right" ? "end" : "start");
+      var base = o.baseline === "middle" ? ' dominant-baseline="central"' : "";
+      this.p.push('<text x="' + r2(x) + '" y="' + r2(y) + '" text-anchor="' + anchor + '"' + base + " font-family='" + o.family.replace(/"/g, "") + "' font-size=\"" + r2(o.size) + '" font-weight="' + (o.weight || 400) + '"' + (o.style === "italic" ? ' font-style="italic"' : "") + (o.ls ? ' letter-spacing="' + r2(o.ls) + '"' : "") + ' fill="' + o.fill + '"' + this.op(o.alpha) + ">" + esc(s) + "</text>");
+    }
+  };
+
+  function colours() { var o = {}; COLOUR_KEYS.forEach(function (k) { o[k] = val(k); }); return { paper: o.cPaper, text: o.cText, grid: o.cGrid, major: o.cMajor, dot: o.cDot, dotMajor: o.cDotMajor, stitch: o.cStitch, punch: o.cPunch, bit: o.cBit, zero: o.cZero }; }
+  function mix(a, b, t) {
+    var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    var r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+    var g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+    var bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+  }
+  function fitSize(s, o, maxW) { var sz = o.size, ratio = (o.ls || 0) / (o.size || 1); while (sz > 4 && measure(s, Object.assign({}, o, { size: sz, ls: sz * ratio })) > maxW) sz -= 0.25; return sz; }
+  function fitted(s, o, maxW) { var sz = fitSize(s, o, maxW), ratio = (o.ls || 0) / (o.size || 1); return Object.assign({}, o, { size: sz, ls: sz * ratio }); }
+  function wrap(s, o, maxW) {
+    var words = s.split(/\s+/).filter(Boolean), lines = [], cur = "";
+    words.forEach(function (w) { var t = cur ? cur + " " + w : w; if (cur && measure(t, o) > maxW) { lines.push(cur); cur = w; } else cur = t; });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function hash(x, y, k) { var h = Math.imul(x * 374761393 + y * 668265263 + k * 2246822519, 1274126177); h ^= h >>> 13; h = Math.imul(h, 1103515245); return ((h ^ h >>> 16) >>> 0) / 4294967296; }
+
+  function typeSpec(pt, textCol, muted) {
+    var D = FONTS[val("fDisplay")] || FONTS.garamond, X = FONTS[val("fText")] || FONTS.haas;
+    var it = function (id) { return on(id) ? "italic" : "normal"; };
+    return {
+      name: { family: D.stack, size: 18 * pt, weight: D.reg, style: it("iName"), fill: textCol, align: "center", ls: 0.9 * pt },
+      title: { family: D.stack, size: 48 * pt, weight: D.disp, style: it("iTitle"), fill: textCol, align: "center", ls: 2.4 * pt },
+      caption: { family: X.stack, size: 10 * pt, weight: X.light, style: it("iCaption"), fill: textCol, align: "center", ls: 0.5 * pt },
+      date: { family: X.stack, size: 12 * pt, weight: X.thin || X.light, style: it("iDate"), fill: textCol, align: "center", ls: 0.6 * pt },
+      runName: { family: D.stack, size: 10 * pt, weight: D.bold, style: "italic", fill: textCol, ls: 0.5 * pt },
+      runRest: { family: X.stack, size: 10 * pt, weight: X.light, style: it("iRun"), fill: textCol, ls: 0.5 * pt },
+      meta: { family: X.stack, size: 8 * pt, weight: X.light, style: it("iRun"), fill: muted, align: "center", ls: 0.8 * pt },
+      key: { family: X.stack, size: 8 * pt, weight: X.light, style: it("iKey"), fill: muted, ls: 0.8 * pt, align: "left", baseline: "middle" }
+    };
+  }
+
+  // The illustration, dithered on its own grid: image → cells → the same states as the frame.
+  var artCache = { key: "", v: null };
+  function artField(art, cols) {
+    var iw = art.img.naturalWidth, ih = art.img.naturalHeight, rows = Math.max(1, Math.round(cols * ih / iw));
+    var key = [state.artName, cols, rows, val("artAlgo"), val("artThreshold"), on("artInvert"), val("origin"), val("soft"), val("zeros"), state.shares.S, state.shares.P, state.shares.B].join("|");
+    if (artCache.key === key) return artCache.v;
+    var M = imageMask(art.img, cols, rows, { algo: val("artAlgo"), fit: "contain", threshold: num("artThreshold"), contrast: 1, invert: on("artInvert") });
+    var v = { cols: cols, rows: rows, st: statesOf(M, cols, rows) };
+    artCache = { key: key, v: v };
+    return v;
+  }
+
+  function paint(P, G, st) {
+    var col = colours(), C = G.cols, R = G.rows, cell = G.cell, W = G.W, H = G.H;
+    var pt = W / 612; // one point, scaled so type and pens keep their size relative to a Letter page
+    var wob = num("wobble"), iv = num("inkVar");
+    var pens = { grid: num("wGrid") * pt, major: num("wMajor") * pt, stitch: num("wStitch") * pt, punch: num("wPunch") * pt, bit: num("wBit") * pt, dot: num("wDot") * pt };
+    var BF = FONTS[val("fBinary")] || FONTS.haas;
+    var gs = val("gridStyle"), every = parseInt(val("major"), 10) || 0;
+    var style = val("stitchStyle"), pst = val("punchStyle"), bst = val("bitStyle"), place = val("place");
+    var embFill = mix(col.paper, col.stitch, 0.28), embHi = mix(col.paper, "#ffffff", 0.9);
+
+    // Hand: wobble moves a stroke (seeded per cell, so it is the same on every render and in every export);
+    // ink varies its pressure, thickness and opacity together.
+    function jit(x, y, k, sz) { return wob ? (hash(x, y, k) - 0.5) * wob * (sz || cell) * 0.16 : 0; }
+    function inkA(x, y, k) { return iv ? 1 - iv * 0.5 * hash(x, y, 70 + (k || 0)) : 1; }
+    function inkW(w, x, y, k) { return iv ? w * (1 + iv * (hash(x, y, 80 + (k || 0)) - 0.45) * 1.1) : w; }
+    function pen(x1, y1, x2, y2, c, w, gx0, gy0, k, sz) {
+      P.line(x1 + jit(gx0, gy0, k, sz), y1 + jit(gx0, gy0, k + 1, sz), x2 + jit(gx0, gy0, k + 2, sz), y2 + jit(gx0, gy0, k + 3, sz), c, inkW(w, gx0, gy0, k), inkA(gx0, gy0, k), null, "round");
+    }
+
+    // Grid over any field; (ox, oy) is its top-left, s its cell size, seed keeps two fields from sharing a hand.
+    function drawGrid(Cn, Rn, ox, oy, s, seed) {
+      if (gs === "none") return;
+      var isMajor = function (i, n) { return i === 0 || i === n || (every && i % every === 0); };
+      if (gs === "lines" || gs === "linesdots") {
+        if (!wob && !iv) {
+          for (var gx = 0; gx <= Cn; gx++) { var hv = isMajor(gx, Cn); P.line(ox + gx * s, oy, ox + gx * s, oy + Rn * s, hv ? col.major : col.grid, hv ? pens.major : pens.grid); }
+          for (var gy = 0; gy <= Rn; gy++) { var hv2 = isMajor(gy, Rn); P.line(ox, oy + gy * s, ox + Cn * s, oy + gy * s, hv2 ? col.major : col.grid, hv2 ? pens.major : pens.grid); }
+        } else {
+        // one stroke per cell edge, so the pen can drift and press differently along the line
+        var nx = function (i, j) { return ox + i * s + (wob ? (hash(i + seed, j, 41) - 0.5) * wob * s * 0.12 : 0); };
+        var ny = function (i, j) { return oy + j * s + (wob ? (hash(i + seed, j, 43) - 0.5) * wob * s * 0.12 : 0); };
+        for (var i = 0; i <= Cn; i++) {
+          var mj = isMajor(i, Cn), c1 = mj ? col.major : col.grid, w1 = mj ? pens.major : pens.grid;
+          for (var j = 0; j < Rn; j++) P.line(nx(i, j), ny(i, j), nx(i, j + 1), ny(i, j + 1), c1, inkW(w1, i + seed, j, 1), inkA(i + seed, j, 1), null, "round");
+        }
+        for (var j2 = 0; j2 <= Rn; j2++) {
+          var mj2 = isMajor(j2, Rn), c2 = mj2 ? col.major : col.grid, w2 = mj2 ? pens.major : pens.grid;
+          for (var i2 = 0; i2 < Cn; i2++) P.line(nx(i2, j2), ny(i2, j2), nx(i2 + 1, j2), ny(i2 + 1, j2), c2, inkW(w2, i2 + seed, j2, 2), inkA(i2 + seed, j2, 2), null, "round");
+        }
+        }
+      }
+      if (gs !== "lines") {
+        for (var py = 0; py <= Rn; py++) for (var px = 0; px <= Cn; px++) {
+          var m3 = isMajor(px, Cn) && isMajor(py, Rn), X0 = ox + px * s, Y0 = oy + py * s, c0 = m3 ? col.major : col.grid, w0 = m3 ? pens.major : pens.grid;
+          if (gs === "plus") { var arm = s * (m3 ? 0.3 : 0.18); pen(X0 - arm, Y0, X0 + arm, Y0, c0, w0, px + seed, py, 51, s); pen(X0, Y0 - arm, X0, Y0 + arm, c0, w0, px + seed, py, 55, s); }
+          else {
+            // dots sit on the intersections; with lines they read as the pins the lines are strung between
+            var dr = Math.max(0.3, inkW(pens.dot * (m3 ? 1.5 : 1), px + seed, py, 3) / 2);
+            var ddx = gs === "linesdots" && !wob ? 0 : jit(px + seed, py, 59, s), ddy = gs === "linesdots" && !wob ? 0 : jit(px + seed, py, 60, s);
+            P.circle(X0 + ddx, Y0 + ddy, dr, m3 ? col.dotMajor : col.dot, inkA(px + seed, py, 3));
+          }
+        }
+      }
+    }
+
+    function stitch(px, py, sz, v, gx0, gy0) {
+      if (style === "yarn") P.yarn(px, py, sz, col.stitch, col.paper, v, inkA(gx0, gy0, 4));
+      else if (style === "penx") { var i1 = sz * 0.24; pen(px + i1, py + i1, px + sz - i1, py + sz - i1, col.stitch, pens.stitch, gx0, gy0, 1, sz); pen(px + sz - i1, py + i1, px + i1, py + sz - i1, col.stitch, pens.stitch, gx0, gy0, 5, sz); }
+      else if (style === "penslash") pen(px + sz * 0.62, py + sz * 0.25, px + sz * 0.38, py + sz * 0.75, col.stitch, pens.stitch, gx0, gy0, 1, sz);
+      else if (style === "cross") { var ins = sz * 0.2, lw = Math.max(pens.stitch, sz * 0.2); pen(px + ins, py + ins, px + sz - ins, py + sz - ins, col.stitch, lw, gx0, gy0, 1, sz); pen(px + sz - ins, py + ins, px + ins, py + sz - ins, col.stitch, lw, gx0, gy0, 5, sz); }
+      else if (style === "emboss") {
+        var a = px + 0.9, b = py + 0.9, e = sz - 1.8, lw2 = inkW(Math.max(pens.stitch * 0.8, sz * 0.06), gx0, gy0, 6), al = inkA(gx0, gy0, 6);
+        P.rect(a, b, e, e, embFill, al);
+        P.line(a, b + lw2 / 2, a + e, b + lw2 / 2, embHi, lw2);
+        P.line(a + lw2 / 2, b, a + lw2 / 2, b + e, embHi, lw2);
+        P.line(a, b + e - lw2 / 2, a + e, b + e - lw2 / 2, col.stitch, lw2, al);
+        P.line(a + e - lw2 / 2, b, a + e - lw2 / 2, b + e, col.stitch, lw2, al);
+      }
+      else P.rect(px + 0.6 + jit(gx0, gy0, 7, sz), py + 0.6 + jit(gx0, gy0, 8, sz), sz - 1.2, sz - 1.2, col.stitch, inkA(gx0, gy0, 7));
+    }
+    function punch(px, py, sz, gx0, gy0) {
+      var cx = px + sz / 2 + jit(gx0, gy0, 11, sz), cy = py + sz / 2 + jit(gx0, gy0, 12, sz), a = inkA(gx0, gy0, 11);
+      if (pst === "ring") P.ring(cx, cy, sz * 0.26, sz * 0.26, col.punch, inkW(pens.punch, gx0, gy0, 11), a);
+      else if (pst === "oval") P.ring(cx, cy, sz * 0.17, sz * 0.33, col.punch, inkW(pens.punch, gx0, gy0, 11), a);
+      else P.circle(cx, cy, sz * 0.27 * (iv ? 1 + iv * (hash(gx0, gy0, 13) - 0.5) * 0.4 : 1), col.punch, a);
+    }
+    function bit(one, px, py, sz, gx0, gy0) {
+      var cx = px + sz / 2, cy = py + sz / 2, c = one ? col.bit : col.zero;
+      if (bst === "pen") {
+        if (one) { pen(cx + sz * 0.02, cy - sz * 0.32, cx + sz * 0.02, cy + sz * 0.32, c, pens.bit, gx0, gy0, 21, sz); pen(cx + sz * 0.02, cy - sz * 0.32, cx - sz * 0.14, cy - sz * 0.19, c, pens.bit, gx0, gy0, 25, sz); }
+        else P.ring(cx + jit(gx0, gy0, 31, sz), cy + jit(gx0, gy0, 32, sz), sz * 0.19, sz * 0.32, c, inkW(pens.bit, gx0, gy0, 31), inkA(gx0, gy0, 31));
+      } else {
+        var f = { family: BF.stack, size: sz * 0.9 * (iv ? 1 + iv * (hash(gx0, gy0, 33) - 0.5) * 0.18 : 1), weight: one ? BF.disp : BF.light, fill: c, align: "center", baseline: "middle", alpha: inkA(gx0, gy0, 33) };
+        P.text(one ? "1" : "0", cx + jit(gx0, gy0, 34, sz), py + sz * 0.53 + jit(gx0, gy0, 35, sz), f);
+      }
+    }
+    // Marks for a whole field of states; seed offsets the hand so the illustration isn't a copy of the frame's.
+    function drawField(S, Cn, Rn, ox, oy, s, seed) {
+      var half = s / 2;
+      for (var y = 0; y < Rn; y++) for (var x = 0; x < Cn; x++) {
+        var v = S[y * Cn + x]; if (!v) continue;
+        var node = place === "all" || (place === "bits" && v >= 3);
+        var px = ox + x * s - (node ? half : 0), py = oy + y * s - (node ? half : 0), hx = x + seed;
+        if (v === 1) stitch(px, py, s, yarnVariant(hx, y), hx, y);
+        else if (v === 2) punch(px, py, s, hx, y);
+        else bit(v === 3, px, py, s, hx, y);
+      }
+    }
+
+    P.rect(0, 0, W, H, col.paper);
+    if (on("showHoles") && G.m >= 18) {
+      var hole = mix(col.paper, col.text, 0.12), perf = mix(col.paper, col.text, 0.3), hr = Math.min(7, G.m * 0.16), hxp = G.m * 0.42;
+      P.line(G.m * 0.86, 0, G.m * 0.86, H, perf, 0.75, 1, [3, 3]);
+      P.line(W - G.m * 0.86, 0, W - G.m * 0.86, H, perf, 0.75, 1, [3, 3]);
+      for (var hy = 24; hy < H - 10; hy += 48) { P.circle(hxp, hy, hr, hole); P.circle(W - hxp, hy, hr, hole); }
+    }
+    drawGrid(C, R, G.gx, G.gy, cell, 0);
+    drawField(st.S, C, R, G.gx, G.gy, cell, 0);
+
+    // cover text (never wobbled or inked: the title block stays typeset)
+    var textCol = col.text, muted = mix(col.paper, col.text, 0.62);
+    var T = typeSpec(pt, textCol, muted), cx = W / 2, blockBottom = null;
+    if (on("showTitle")) {
+      // Stack from the cover of masters_port: name baseline, title baseline +64 pt,
+      // illustration top +38 pt below the title's descenders, date baseline +66 pt below it.
+      // With no illustration, one blank line of the date's leading separates title and date.
+      var name = val("tName").trim(), title = val("tTitle").trim(), cap = val("tCaption").trim(), date = val("tDate").trim();
+      var maxW = Math.max(120 * pt, Math.min(G.gw - 2 * 20 * cell, 400 * pt));
+      var fN = fitted(name, T.name, maxW), fT = fitted(title, T.title, maxW), fC = T.caption, fD = fitted(date, T.date, maxW);
+      var capLines = cap ? wrap(cap, fC, Math.min(maxW, 250 * pt)) : [], lh = 15 * pt;
+      var art = on("showArt") && state.art ? state.art : null, artW = 0, artH = 0, field = null;
+      if (art) {
+        var iw = art.img.naturalWidth, ih = art.img.naturalHeight;
+        artW = Math.min(G.gw - 4 * cell, num("artWidth") * pt); artH = artW * ih / iw;
+        var maxH = Math.max(80 * pt, G.gh * 0.45);
+        if (artH > maxH) { artH = maxH; artW = artH * iw / ih; }
+        if (val("artMode") === "cells") {
+          field = artField(art, parseInt(val("artCols"), 10));
+          field.cell = artW / field.cols; artH = field.rows * field.cell;
+        }
+      }
+      var left = val("titleAlign") === "left", tx = left ? G.gx + ((source() === "image" ? 3 : (FRAME_INSET[val("frameStyle")] || 19)) + 2) * cell : cx;
+      if (left) { var la = function (f) { return Object.assign({}, f, { align: "left" }); }; fN = la(fN); fT = la(fT); fC = la(fC); fD = la(fD); }
+      var ops = [], top = null, yb = 0, prev = false, widest = 0, blank = fD.size * 1.5;
+      if (name) { top = -fN.size * 0.66; ops.push(["name", 0]); yb = fN.size * 0.25; prev = true; widest = Math.max(widest, measure(name, fN)); }
+      if (title) { var tb = prev ? 64 * pt : 0; if (top === null) top = -fT.size * 0.66; ops.push(["title", tb]); yb = tb + fT.size * 0.22; prev = true; widest = Math.max(widest, measure(title, fT)); }
+      if (art) { var at = prev ? yb + 38 * pt : 0; if (top === null) top = at; ops.push(["art", at]); yb = at + artH; widest = Math.max(widest, artW); }
+      if (capLines.length) { var cb = art ? yb + 36 * pt : (prev ? yb + blank + fC.size * 0.72 : 0); if (top === null) top = cb - fC.size * 0.7; ops.push(["cap", cb]); yb = cb + (capLines.length - 1) * lh; prev = true; capLines.forEach(function (l) { widest = Math.max(widest, measure(l, fC)); }); }
+      if (date) { var db = capLines.length ? yb + 26 * pt : (art ? yb + 66 * pt : (prev ? yb + blank + fD.size * 0.72 : 0)); if (top === null) top = db - fD.size * 0.7; ops.push(["date", db]); yb = db; widest = Math.max(widest, measure(date, fD)); }
+      if (ops.length) {
+        var off = H * 0.487 - (top + yb) / 2;
+        blockBottom = off + yb + (on("plate") ? 26 * pt : 0);
+        if (on("plate")) {
+          var pw = Math.max(widest + 64 * pt, 200 * pt), padT = 30 * pt, padB = 26 * pt;
+          var x0 = left ? tx - 32 * pt : cx - pw / 2, y0 = off + top - padT, ph = (yb - top) + padT + padB, rule = val("plateRule"), lw = 0.75 * pt;
+          P.rect(x0, y0, pw, ph, col.paper);
+          if (rule !== "none") P.frame(x0 + lw / 2, y0 + lw / 2, pw - lw, ph - lw, textCol, lw);
+          if (rule === "double") P.frame(x0 + 3.5 * pt, y0 + 3.5 * pt, pw - 7 * pt, ph - 7 * pt, textCol, 0.5 * pt, 0.55);
+        }
+        ops.forEach(function (o) {
+          var yy = off + o[1];
+          if (o[0] === "name") P.text(name, tx, yy, fN);
+          else if (o[0] === "title") P.text(title, tx, yy, fT);
+          else if (o[0] === "art") {
+            if (field) {
+              var ax = left ? tx : cx - artW / 2;
+              if (on("artGrid")) drawGrid(field.cols, field.rows, ax, yy, field.cell, 5000);
+              drawField(field.st.S, field.cols, field.rows, ax, yy, field.cell, 5000);
+            } else P.image(art, left ? tx : cx - artW / 2, yy, artW, artH);
+          }
+          else if (o[0] === "cap") capLines.forEach(function (l, i) { P.text(l, tx, yy + i * lh, fC); });
+          else P.text(date, tx, yy, fD);
+        });
+      }
+    }
+    if (on("showLegend")) {
+      var ly = G.gy + G.gh - Math.max(cell * 21, 105 * pt), lab = T.key;
+      if (blockBottom !== null) ly = Math.max(ly, blockBottom + 30 * pt);
+      var items = [["Stitched", 1], ["Punched", 2], ["Read", 3]], gap = 16 * pt, mk = Math.max(8 * pt, Math.min(cell, 12 * pt)), mark = mk + 5 * pt, wsum = 0;
+      items.forEach(function (it) { wsum += mark + measure(it[0], lab); });
+      wsum += gap * (items.length - 1);
+      var lx = cx - wsum / 2;
+      items.forEach(function (it, n) {
+        if (it[1] === 1) stitch(lx, ly - mk / 2, mk, 0, 900 + n, 0);
+        else if (it[1] === 2) punch(lx, ly - mk / 2, mk, 900 + n, 0);
+        else bit(true, lx, ly - mk / 2, mk, 900 + n, 0);
+        P.text(it[0], lx + mark, ly + 0.5, Object.assign({}, lab, { alpha: inkA(910 + n, 0, 1) }));
+        lx += mark + measure(it[0], lab) + gap;
+      });
+    }
+    if (on("showFooter")) {
+      // Running header of the portfolio: the name in the display face, bold italic, then " / section / …" in the text face.
+      var runName = val("tName").trim() || "Untitled";
+      var rest = " / Cover / " + SIZE_NAME[val("size")] + " " + fmtIn(G.wi) + " × " + fmtIn(G.hi) + " in / Point paper " + C + " × " + R + " / Stitched " + state.shares.S + "%, punched " + state.shares.P + "%, binary " + state.shares.B + "% from " + ORIGIN_LABEL[val("origin")];
+      var fy = G.gy + G.gh + 24 * pt;
+      var fR = T.runName, fS = T.runRest, wN = measure(runName, fR), wS = measure(rest, fS);
+      if (wN + wS > G.gw) { var sc2 = G.gw / (wN + wS); fR = Object.assign({}, fR, { size: fR.size * sc2, ls: fR.ls * sc2 }); fS = Object.assign({}, fS, { size: fS.size * sc2, ls: fS.ls * sc2 }); wN = measure(runName, fR); wS = measure(rest, fS); }
+      var sx0 = cx - (wN + wS) / 2;
+      P.text(runName, sx0, fy, Object.assign({}, fR, { alpha: inkA(930, 0, 1) }));
+      P.text(rest, sx0 + wN + fR.ls, fy, Object.assign({}, fS, { alpha: inkA(931, 0, 1) }));
+      var src = source(), parts2 = [];
+      if (src !== "image" || !state.image) parts2.push(FRAME_FORMULA[val("frameStyle")]);
+      var ins = FRAME_INSET[val("frameStyle")] || 19;
+      if (src !== "frame" && state.image) parts2.push("image → " + (src === "both" ? (C - 2 * ins) + "×" + (R - 2 * ins) : C + "×" + R) + " cells by " + ALGO_LABEL[val("algo")] + ", threshold " + num("threshold").toFixed(2) + (on("invert") ? ", inverted" : ""));
+      if (state.art && on("showArt") && on("showTitle") && val("artMode") === "cells") parts2.push("illustration → " + val("artCols") + " columns by " + ALGO_LABEL[val("artAlgo")]);
+      var l2 = parts2.join(" · ");
+      var l3 = "state: rank filled cells by d/dmax + " + (0.35 * num("soft")).toFixed(2) + "(B₄/15 − ½) from " + ORIGIN_LABEL[val("origin")] + " → first " + state.shares.B + "% read as bits, next " + state.shares.P + "% punched, last " + state.shares.S + "% stitched";
+      P.text(l2, cx, fy + 15 * pt, Object.assign(fitted(l2, T.meta, G.gw), { alpha: inkA(932, 0, 1) }));
+      P.text(l3, cx, fy + 26 * pt, Object.assign(fitted(l3, T.meta, G.gw), { alpha: inkA(933, 0, 1) }));
+    }
+  }
+  function fmtIn(v) { return (Math.round(v * 100) / 100).toString(); }
+
+  // ---------- preview ----------
+  var cv = $("proof"), ctx = cv.getContext("2d"), raf = 0;
+  function render() {
+    raf = 0;
+    var G = geom();
+    $("proofBox").style.setProperty("--ratio", (G.W / G.H).toFixed(5));
+    $("proofBox").style.setProperty("--zoom", radio("zoom") || "1");
+    var r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 3);
+    var cap = Math.sqrt(26e6 / Math.max(1, r.width * r.height)); if (dpr > cap) dpr = cap;
+    var w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    var st = computeStates(G);
+    ctx.setTransform(cv.width / G.W, 0, 0, cv.height / G.H, 0, 0);
+    paint(new CanvasPainter(ctx, cv.width / G.W), G, st);
+    updateReadout(G, st);
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(render); }
+  function fmt(n) { return n.toLocaleString("en-US"); }
+  function updateReadout(G, st) {
+    $("gridDims").textContent = G.cols + " × " + G.rows;
+    $("cellCount").textContent = fmt(st.total) + " cells";
+    $("paperDims").textContent = fmtIn(G.wi) + " × " + fmtIn(G.hi) + " in";
+    var bits = [["stitched", st.nS], ["punched", st.nP], ["bits", st.nB], ["zeros", st.zeros]];
+    $("readout").textContent = "";
+    bits.forEach(function (p) {
+      var sp = document.createElement("span"), b = document.createElement("b"); b.textContent = fmt(p[1]);
+      sp.appendChild(b); sp.appendChild(document.createTextNode(" " + p[0])); $("readout").appendChild(sp);
+    });
+    $("exPng").textContent = "PNG · 300 dpi · " + pngSize(G).w + " × " + pngSize(G).h;
+  }
+  function pngSize(G) { var sc = Math.min(300 / PX, 9000 / Math.max(G.W, G.H)); return { sc: sc, w: Math.round(G.W * sc), h: Math.round(G.H * sc) }; }
+
+  // ---------- shares ----------
+  function setShare(which, v) {
+    var ks = ["S", "P", "B"].filter(function (q) { return q !== which; });
+    var rest = 100 - v, a = state.shares[ks[0]], b = state.shares[ks[1]];
+    var na = (a + b) === 0 ? Math.round(rest / 2) : Math.round(rest * a / (a + b));
+    state.shares[which] = v; state.shares[ks[0]] = na; state.shares[ks[1]] = rest - na;
+    syncShares();
+  }
+  function readable(hex) {
+    var p = parseInt(hex.slice(1), 16), l = (0.2126 * ((p >> 16) & 255) + 0.7152 * ((p >> 8) & 255) + 0.0722 * (p & 255)) / 255;
+    return l > 0.55 ? "#111111" : "#ffffff";
+  }
+  function syncShares() {
+    ["S", "P", "B"].forEach(function (q) {
+      $("share" + q).value = state.shares[q];
+      $("share" + q + "Out").textContent = state.shares[q] + "%";
+      var bar = $("bar" + q); bar.style.flexGrow = state.shares[q]; bar.textContent = state.shares[q] >= 9 ? state.shares[q] + "%" : "";
+    });
+    var col = colours();
+    $("barS").style.background = col.stitch; $("barS").style.color = readable(col.stitch);
+    $("barP").style.background = col.punch; $("barP").style.color = readable(col.punch);
+    $("barB").style.background = col.bit; $("barB").style.color = readable(col.bit);
+    $("chipS").style.background = col.stitch; $("chipP").style.background = col.punch; $("chipB").style.background = col.bit;
+  }
+
+  // ---------- controls ----------
+  ["S", "P", "B"].forEach(function (q) {
+    $("share" + q).addEventListener("input", function (e) { setShare(q, parseInt(e.target.value, 10)); if (typeof profiles !== "undefined") profiles.mark(); schedule(); });
+  });
+  function syncOutputs() {
+    var mIn = num("margin");
+    $("marginOut").textContent = mIn.toFixed(2) + " in · " + (mIn * 25.4).toFixed(1) + " mm";
+    $("colsOut").textContent = val("cols");
+    $("thresholdOut").textContent = num("threshold").toFixed(2);
+    $("contrastOut").textContent = (Math.round(num("contrast") * 100) / 100) + "×";
+    $("softOut").textContent = num("soft").toFixed(2);
+    ["wGrid", "wMajor", "wDot", "wStitch", "wPunch", "wBit", "wobble", "inkVar", "artThreshold"].forEach(function (id) { $(id + "Out").textContent = num(id).toFixed(2); });
+    $("artColsOut").textContent = val("artCols") + " columns";
+    $("artWidthOut").textContent = val("artWidth") + " pt";
+    $("artControls").classList.toggle("hide", !state.art);
+    ["artCols", "artAlgo", "artThreshold", "artInvert", "artGrid"].forEach(function (id) { $(id).disabled = val("artMode") !== "cells"; });
+    $("imageControls").classList.toggle("hide", source() === "frame");
+    $("frameRow").classList.toggle("hide", source() === "image");
+    $("customBox").classList.toggle("hide", val("size") !== "custom");
+    $("plateRule").disabled = !on("plate");
+  }
+  var lastUnit = "in";
+  $("cu").addEventListener("change", function () {
+    var u = val("cu"); if (u === lastUnit) return;
+    var f = u === "mm" ? 25.4 : 1 / 25.4;
+    ["cw", "ch"].forEach(function (id) { $(id).value = Math.round(num(id) * f * 100) / 100; $(id).step = u === "mm" ? "1" : "0.125"; $(id).max = u === "mm" ? "1500" : "60"; });
+    lastUnit = u;
+  });
+
+  // ---------- type ----------
+  function fillFontSelect(id, def) {
+    Object.keys(FONTS).forEach(function (k) { var o = document.createElement("option"); o.value = k; o.textContent = FONTS[k].label; if (k === def) o.selected = true; $(id).appendChild(o); });
+  }
+  fillFontSelect("fDisplay", "garamond"); fillFontSelect("fText", "haas"); fillFontSelect("fBinary", "haas");
+  function ensureFonts() {
+    if (!document.fonts || !document.fonts.load) return;
+    var D = FONTS[val("fDisplay")], X = FONTS[val("fText")], B = FONTS[val("fBinary")], jobs = [];
+    [[D, D.reg, ""], [D, D.disp, ""], [D, D.disp, "italic "], [D, D.bold, "italic "], [X, X.light, ""], [B, B.disp, ""], [B, B.light, ""]].forEach(function (f) {
+      jobs.push(document.fonts.load(f[2] + f[1] + " 16px " + f[0].stack).catch(function () {}));
+    });
+    Promise.all(jobs).then(schedule, schedule);
+  }
+
+  document.querySelectorAll("input, select, textarea").forEach(function (el) {
+    if (el.id && /^share/.test(el.id)) return;
+    if (el.type === "file" || el.id === "palName" || el.id === "penName" || el.id === "profName") return;
+    el.addEventListener("input", function () { syncOutputs(); if (el.type === "color") syncShares(); markPalette(); schedule(); });
+    el.addEventListener("change", function () { syncOutputs(); markPalette(); if (/^f(Display|Text|Binary)$/.test(el.id)) ensureFonts(); schedule(); });
+  });
+
+  // ---------- saved sets: colour palettes and pen sets (built-in, plus ones you save with this page) ----------
+  var PEN_KEYS = ["gridStyle", "major", "wGrid", "wMajor", "wDot", "wStitch", "wPunch", "wBit", "wobble", "inkVar"];
+  var PEN_PRESETS = [
+    { name: "Fine liner", c: { gridStyle: "lines", major: "8", wGrid: "0.25", wMajor: "0.45", wDot: "0.9", wStitch: "0.35", wPunch: "0.35", wBit: "0.35", wobble: "0", inkVar: "0" } },
+    { name: "Technical", c: { gridStyle: "lines", major: "8", wGrid: "0.45", wMajor: "0.75", wDot: "1.4", wStitch: "0.8", wPunch: "0.6", wBit: "0.6", wobble: "0", inkVar: "0" } },
+    { name: "Old plotter", c: { gridStyle: "linesdots", major: "10", wGrid: "0.4", wMajor: "0.7", wDot: "1.6", wStitch: "0.7", wPunch: "0.6", wBit: "0.6", wobble: "0.35", inkVar: "0.45" } },
+    { name: "Felt tip", c: { gridStyle: "plus", major: "8", wGrid: "0.7", wMajor: "1.3", wDot: "2.2", wStitch: "1.6", wPunch: "1.2", wBit: "1.2", wobble: "0.5", inkVar: "0.7" } }
+  ];
+  var dbPromise = null;
+  function getDb() {
+    if (!dbPromise) dbPromise = new Promise(function (res) {
+      try { if (window.claude && window.claude.use) window.claude.use("db").then(res, function () { res(null); }); else res(null); } catch (e) { res(null); }
+    });
+    return dbPromise;
+  }
+  function SavedSets(o) {
+    // o: { coll, localKey, keys, builtins, box, nameEl, saveEl, noteEl, noun, chips(c) → [colour], after }
+    var self = this; this.o = o; this.saved = []; this.db = null;
+    this.current = o.get || function () { var c = {}; o.keys.forEach(function (k) { c[k] = $(k).value; }); return c; };
+    this.same = function (c) { var cur = self.current(); return Object.keys(c).every(function (k) { return cur[k] == null || String(c[k]).toLowerCase() === String(cur[k]).toLowerCase(); }); };
+    this.apply = function (c) { if (o.set) o.set(c); else o.keys.forEach(function (k) { if (c[k] != null) $(k).value = c[k]; }); syncOutputs(); if (o.after) o.after(); schedule(); markPalette(); };
+    this.mark = function () { $(o.box).querySelectorAll("[data-set]").forEach(function (b) { var hit = !!(b.__c && self.same(b.__c)); b.classList.toggle("primary", hit); b.setAttribute("aria-pressed", hit ? "true" : "false"); }); };
+    this.note = function (t) { $(o.noteEl).textContent = t; };
+    this.button = function (p) {
+      var b = document.createElement("button"); b.type = "button"; b.setAttribute("data-set", "1"); b.__c = p.c;
+      var chips = document.createElement("span"); chips.className = "pchip"; chips.setAttribute("aria-hidden", "true");
+      o.chips(p.c).forEach(function (ch) { var i = document.createElement("i"); if (ch.bg) i.style.background = ch.bg; if (ch.h) { i.style.height = ch.h + "px"; i.style.alignSelf = "center"; } chips.appendChild(i); });
+      b.appendChild(chips); b.appendChild(document.createTextNode(p.name));
+      b.addEventListener("click", function () { self.apply(p.c); });
+      return b;
+    };
+    this.render = function () {
+      var box = $(o.box); box.textContent = "";
+      o.builtins.forEach(function (p) { box.appendChild(self.button(p)); });
+      self.saved.forEach(function (p) {
+        var w = document.createElement("span"); w.className = "pal"; w.appendChild(self.button(p));
+        var del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", "Delete " + o.noun + " " + p.name);
+        var t = 0;
+        del.addEventListener("click", function () {
+          if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = "Delete?"; clearTimeout(t); t = setTimeout(function () { del.classList.remove("armed"); del.textContent = "×"; }, 3000); return; }
+          self.remove(p);
+        });
+        w.appendChild(del); box.appendChild(w);
+      });
+      self.mark();
+    };
+    this.readLocal = function () { try { var s = localStorage.getItem(o.localKey); return s ? JSON.parse(s) : []; } catch (e) { return []; } };
+    this.writeLocal = function () { try { localStorage.setItem(o.localKey, JSON.stringify(self.saved)); return true; } catch (e) { return false; } };
+    this.save = function () {
+      var name = ($(o.nameEl).value.trim() || (o.noun.charAt(0).toUpperCase() + o.noun.slice(1) + " " + (self.saved.length + 1))).slice(0, 40);
+      var p = { name: name, c: self.current(), createdAt: Date.now() };
+      if (self.db) {
+        self.db.collection(o.coll).add({ name: p.name, values: p.c, createdAt: p.createdAt }).then(function () { $(o.nameEl).value = ""; self.note("Saved “" + p.name + "”."); }).catch(function (e) {
+          self.note(e && e.code === "quota_exceeded" ? "Storage is full. Delete a saved " + o.noun + ", then save again." : "That " + o.noun + " couldn't be saved (" + ((e && e.code) || "error") + "). Try again.");
+        });
+      } else {
+        self.saved.push({ id: "l" + p.createdAt, name: p.name, c: p.c, createdAt: p.createdAt });
+        self.render(); $(o.nameEl).value = "";
+        self.note(self.writeLocal() ? "Saved “" + p.name + "” in this browser." : "Saved “" + p.name + "” for this visit only. This browser isn't keeping page data.");
+      }
+    };
+    this.remove = function (p) {
+      if (self.db && p.id && p.id.charAt(0) !== "l") self.db.collection(o.coll).doc(p.id).delete().then(function () { self.note("Deleted “" + p.name + "”."); }).catch(function (e) { self.note("That " + o.noun + " couldn't be deleted (" + ((e && e.code) || "error") + ")."); });
+      else { self.saved = self.saved.filter(function (q) { return q !== p; }); self.writeLocal(); self.render(); self.note("Deleted “" + p.name + "”."); }
+    };
+    this.start = function () {
+      self.saved = self.readLocal(); self.render();
+      $(o.saveEl).addEventListener("click", self.save);
+      $(o.nameEl).addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); self.save(); } });
+      getDb().then(function (db) {
+        if (!db) return;
+        self.db = db;
+        db.collection(o.coll).orderBy("createdAt").onSnapshot(function (snap) {
+          self.saved = snap.docs.map(function (d) { var x = d.data() || {}; return { id: d.id, name: String(x.name || "Untitled"), c: x.values || x.colors || {}, createdAt: x.createdAt || 0 }; });
+          self.render();
+        }, function () { self.db = null; self.note("Saved " + o.noun + "s can't be reached right now. New ones are kept in this browser."); });
+      });
+    };
+  }
+  var palettes = new SavedSets({ coll: "palettes", localKey: "ppl-palettes", keys: COLOUR_KEYS, builtins: PRESETS, box: "presets", nameEl: "palName", saveEl: "palSave", noteEl: "palNote", noun: "palette",
+    chips: function (c) { return ["cPaper", "cGrid", "cStitch", "cPunch", "cBit", "cText"].map(function (k) { return { bg: c[k] || "transparent" }; }); }, after: syncShares });
+  var penSets = new SavedSets({ coll: "pens", localKey: "ppl-pens", keys: PEN_KEYS, builtins: PEN_PRESETS, box: "penPresets", nameEl: "penName", saveEl: "penSave", noteEl: "penNote", noun: "pen set",
+    chips: function (c) { return ["wGrid", "wMajor", "wStitch", "wPunch", "wBit"].map(function (k) { return { bg: "currentColor", h: Math.max(1, Math.min(14, Math.round(parseFloat(c[k] || 0.5) * 5))) }; }); } });
+  // Profiles: every control in the panel (checkboxes and radios by state), plus the three state shares.
+  var NOT_IN_PROFILE = { palName: 1, penName: 1, profName: 1 };
+  function profileIds() { return Array.prototype.map.call(document.querySelectorAll(".panel input, .panel select, .panel textarea"), function (el) { return el; }).filter(function (el) { return el.id && el.type !== "file" && !NOT_IN_PROFILE[el.id] && !/^share[SPB]$/.test(el.id); }); }
+  var profiles = new SavedSets({ coll: "profiles", localKey: "ppl-profiles", keys: [], builtins: [], box: "profPresets", nameEl: "profName", saveEl: "profSave", noteEl: "profNote", noun: "profile",
+    get: function () { var c = { __S: state.shares.S, __P: state.shares.P, __B: state.shares.B }; profileIds().forEach(function (el) { c[el.id] = (el.type === "checkbox" || el.type === "radio") ? (el.checked ? "1" : "0") : el.value; }); return c; },
+    set: function (c) {
+      profileIds().forEach(function (el) { if (c[el.id] == null) return; if (el.type === "checkbox" || el.type === "radio") el.checked = c[el.id] === "1" || c[el.id] === true; else el.value = c[el.id]; });
+      if (c.__S != null) { state.shares = { S: +c.__S, P: +c.__P, B: +c.__B }; }
+      lastUnit = val("cu"); ensureFonts();
+    },
+    after: syncShares,
+    chips: function (c) { return ["cPaper", "cGrid", "cStitch", "cPunch", "cBit", "cText"].map(function (k) { return { bg: c[k] || "transparent" }; }); } });
+  function markPalette() { palettes.mark(); penSets.mark(); profiles.mark(); }
+
+  // ---------- uploads ----------
+  function readImage(f, cb, errEl) {
+    if (!f || !/^image\//.test(f.type)) { errEl.textContent = "That file isn't an image. Try a PNG, JPG, GIF or WebP."; return; }
+    var fr = new FileReader();
+    fr.onload = function () {
+      var img = new Image();
+      img.onload = function () { cb(img, fr.result); };
+      img.onerror = function () { errEl.textContent = "This image couldn't be read. Try saving it as PNG or JPG."; };
+      img.src = fr.result;
+    };
+    fr.onerror = function () { errEl.textContent = "This file couldn't be opened."; };
+    fr.readAsDataURL(f);
+  }
+  function loadPattern(f) {
+    readImage(f, function (img) {
+      state.image = img; state.imageName = f.name + "·" + f.size + "·" + Date.now();
+      $("fileName").textContent = f.name + " · " + img.naturalWidth + " × " + img.naturalHeight + " px";
+      if (source() === "frame") $("src-image").checked = true;
+      syncOutputs(); schedule();
+    }, $("fileName"));
+  }
+  function loadArt(f) {
+    readImage(f, function (img, url) {
+      state.art = { img: img, url: url }; state.artName = f.name + "·" + f.size + "·" + Date.now();
+      syncOutputs();
+      $("artName").textContent = f.name + " · " + img.naturalWidth + " × " + img.naturalHeight + " px";
+      $("showArt").checked = true; schedule();
+    }, $("artName"));
+  }
+  $("file").addEventListener("change", function (e) { loadPattern(e.target.files[0]); });
+  $("artFile").addEventListener("change", function (e) { loadArt(e.target.files[0]); });
+  function dropZone(zone, loader) {
+    ["dragenter", "dragover"].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); zone.classList.add("over"); }); });
+    zone.addEventListener("dragleave", function () { zone.classList.remove("over"); });
+    zone.addEventListener("drop", function (e) { e.preventDefault(); e.stopPropagation(); zone.classList.remove("over"); var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loader(f); });
+  }
+  dropZone($("drop"), loadPattern);
+  dropZone($("dropArt"), loadArt);
+  dropZone($("proofBox"), loadPattern);
+  document.addEventListener("dragover", function (e) { e.preventDefault(); });
+  document.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  // ---------- exports ----------
+  var downloads = null;
+  function setNote(t) { $("exportNote").textContent = t; }
+  function save(filename, data) {
+    if (!downloads) { setNote("Saving files isn't available in this view."); return; }
+    downloads.save({ filename: filename, data: data }).then(function () { setNote("Saved " + filename + "."); }).catch(function (err) {
+      var c = err && err.code;
+      if (c === "declined") setNote("Save cancelled.");
+      else if (c === "rate_limited") setNote("A save prompt is already open. Finish it, then try again.");
+      else setNote("That file couldn't be saved here (" + (c || "error") + ").");
+    });
+  }
+  // Outside the Claude runtime (e.g. GitHub Pages) files download straight from the browser.
+  var directDownloads = {
+    save: function (o) {
+      return new Promise(function (res) {
+        var blob = o.data instanceof Blob ? o.data : new Blob([o.data], { type: /\.svg$/.test(o.filename) ? "image/svg+xml" : "text/plain;charset=utf-8" });
+        var url = URL.createObjectURL(blob), a = document.createElement("a");
+        a.href = url; a.download = o.filename; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+        res();
+      });
+    }
+  };
+  function slug() { return (SIZE_NAME[val("size")] + "-" + radio("orient")).toLowerCase(); }
+  $("exPng").addEventListener("click", function () {
+    var G = geom(), st = computeStates(G), ps = pngSize(G), c = document.createElement("canvas");
+    c.width = ps.w; c.height = ps.h;
+    var x = c.getContext("2d"); x.setTransform(ps.w / G.W, 0, 0, ps.h / G.H, 0, 0);
+    paint(new CanvasPainter(x, ps.w / G.W), G, st);
+    c.toBlob(function (b) { if (b) save("portfolio-cover-" + slug() + ".png", b); else setNote("The PNG couldn't be generated at this size. Try a smaller paper size."); }, "image/png");
+  });
+  $("exSvg").addEventListener("click", function () {
+    var G = geom(), st = computeStates(G), P = new SvgPainter();
+    paint(P, G, st);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + fmtIn(G.wi) + 'in" height="' + fmtIn(G.hi) + 'in" viewBox="0 0 ' + G.W + " " + G.H + '">' +
+      "<style>@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&amp;family=Arimo:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Bodoni+Moda:ital,wght@0,400;0,600;0,700;1,400;1,700&amp;family=Instrument+Serif:ital@0;1&amp;family=Schibsted+Grotesk:ital,wght@0,400;0,600;0,700;1,400;1,700&amp;family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,400&amp;family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap');</style>" +
+      "<defs>" + P.defs.join("") + "</defs>" + P.p.join("") + "</svg>";
+    save("portfolio-cover-" + slug() + ".svg", svg);
+  });
+  $("exTxt").addEventListener("click", function () {
+    var G = geom(), st = computeStates(G), sym = [".", "X", "o", "1", "0"], out = [];
+    out.push("POINT PAPER CHART  " + G.cols + " x " + G.rows + " cells  on " + SIZE_NAME[val("size")] + " " + fmtIn(G.wi) + " x " + fmtIn(G.hi) + " in, margin " + num("margin").toFixed(2) + " in, cell " + (G.cell / PX * 25.4).toFixed(2) + " mm");
+    out.push("X stitched (" + st.nS + ")   o punched (" + st.nP + ")   1 bit (" + st.nB + ")   0 empty bit (" + st.zeros + ")   . blank");
+    out.push("Rows read top to bottom; columns left to right. Every 8th column is marked with | in the ruler.");
+    out.push("");
+    var ruler = "     ";
+    for (var x = 0; x < G.cols; x++) ruler += x % 8 === 0 ? "|" : " ";
+    out.push(ruler);
+    for (var y = 0; y < G.rows; y++) {
+      var line = String(y + 1).padStart(4, " ") + " ";
+      for (var xx = 0; xx < G.cols; xx++) line += sym[st.S[y * G.cols + xx]];
+      out.push(line);
+    }
+    save("stitch-chart-" + slug() + ".txt", out.join("\n") + "\n");
+  });
+
+  // ---------- boot ----------
+  syncOutputs(); syncShares(); palettes.start(); penSets.start(); profiles.start();
+  if (window.ResizeObserver) new ResizeObserver(schedule).observe(cv); else window.addEventListener("resize", schedule);
+  schedule();
+  ensureFonts();
+  function noDownloads() { $("exports").classList.add("hide"); setNote("Saving files isn't available in this view."); }
+  try {
+    if (window.claude && window.claude.use) window.claude.use("downloads").then(function (d) { downloads = d; if (!d) noDownloads(); }, noDownloads);
+    else downloads = directDownloads;
+  } catch (e) { noDownloads(); }
+})();
+</script>
+
+</body>
+</html>
