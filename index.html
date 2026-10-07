@@ -298,7 +298,8 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
               <option value="emboss" selected>Blind emboss</option>
               <option value="square">Filled square</option>
               <option value="cross">Cross stitch (flat)</option>
-              <option value="yarn">Cross stitch (yarn)</option>
+              <option value="yarn">Cross stitch (floss)</option>
+              <option value="wool">Cross stitch (wool)</option>
               <option value="penx">Pen: X</option>
               <option value="penslash">Pen: slash</option>
             </select>
@@ -329,6 +330,11 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
             </select>
           </div>
         </div>
+        <div class="weights hide" id="yarnControls" style="margin-top: 12px">
+          <label for="halo">Halo</label><input type="range" id="halo" min="0" max="100" step="1" value="46"><output id="haloOut" for="halo">46</output>
+          <label for="strays">Strays</label><input type="range" id="strays" min="0" max="100" step="1" value="34"><output id="straysOut" for="strays">34</output>
+        </div>
+        <p class="note hide" id="yarnNote">Halo is the loose fibre around wool. Strays are loose threads left trailing from the stitches.</p>
       </section>
 
       <section class="sheet" aria-labelledby="h-line">
@@ -838,6 +844,154 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
   }
   function yarnVariant(x, y) { return (x * 7 + y * 13 + ((x * y) % 5)) & 3; }
 
+  // ---------- wool: the same cross stitch, rendered as fibrous two-ply yarn ----------
+  // Each leg keeps the X geometry of the floss model, but every ply is built from slanted lumps
+  // (the S-twist read as a row of lozenges), combed with short surface fibres, and ringed with a
+  // halo of loose hairs. Up to 40 hairs per ply are generated; `halo` (0..1) decides how many show
+  // and how far they reach. Unit cell 0..1.
+  var woolModels = {}, WOOL_VARIANTS = 8, WOOL_PAD = 0.3;
+  function woolModel(v) {
+    if (woolModels[v]) return woolModels[v];
+    var r = rng(v * 4099 + 911), j = function (a) { return (r() - 0.5) * a; };
+    var A = 0.1, B = 0.9, legs = [[A + j(0.04), B + j(0.04), B + j(0.04), A + j(0.04)], [A + j(0.04), A + j(0.04), B + j(0.04), B + j(0.04)]];
+    var L = [-Math.SQRT1_2, -Math.SQRT1_2], TILT = 1.0, out = { holes: [[A, A], [B, A], [A, B], [B, B]], legs: [] };
+    legs.forEach(function (g) {
+      var p0 = [g[0], g[1]], p1 = [g[2], g[3]], dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy);
+      var n = [-dy / len, dx / len], mid = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2], in8 = function (a, b) { return [a[0] + (b[0] - a[0]) * 0.09, a[1] + (b[1] - a[1]) * 0.09]; };
+      var leg = { shadow: [in8(p0, p1), in8(p1, p0)], plies: [], glow: [p0, p1] };
+      [-1, 1].forEach(function (side) {
+        var o = side * 0.068 * (1 + j(0.3)), w = 0.155 * (1 + j(0.14));
+        var P0 = [p0[0] + n[0] * o * 0.3, p0[1] + n[1] * o * 0.3], Cc = [mid[0] + n[0] * o * 1.5, mid[1] + n[1] * o * 1.5], P1 = [p1[0] + n[0] * o * 0.3, p1[1] + n[1] * o * 0.3];
+        var bz = function (t) { var a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t; return [a * P0[0] + b * Cc[0] + c * P1[0], a * P0[1] + b * Cc[1] + c * P1[1]]; };
+        var tg = function (t) { var x = 2 * (1 - t) * (Cc[0] - P0[0]) + 2 * t * (P1[0] - Cc[0]), y = 2 * (1 - t) * (Cc[1] - P0[1]) + 2 * t * (P1[1] - Cc[1]), h = Math.hypot(x, y); return [x / h, y / h]; };
+        var pts = [], lumps = [], fibres = [], hairs = [];
+        for (var i = 0; i <= 16; i++) pts.push(bz(i / 16));
+        // lumps: slanted ellipses along the ply, each shaded across its short axis toward the light
+        // Each lump is one turn of the ply seen from above: a bar slanted ~57° across the ply,
+        // long axis spanning its width, shaded along the short axis like a small cylinder.
+        var N = 12, step = 0.92 / N;
+        for (var k = 0; k < N; k++) {
+          var t = 0.04 + step * (k + 0.5) + j(step * 0.2), c = bz(t), T = tg(t), ang = Math.atan2(T[1], T[0]) + TILT * (1 + j(0.15));
+          var nx = -Math.sin(ang), ny = Math.cos(ang), lit = nx * L[0] + ny * L[1] >= 0 ? 1 : -1, taper = t < 0.12 || t > 0.88 ? 0.72 : 1;
+          lumps.push({ c: c, ang: ang, rx: w * 0.64 * taper * (1 + j(0.12)), ry: step * len * 0.56 * (1 + j(0.2)), lit: lit, tone: j(0.3) });
+        }
+        // surface fibres: short combed strokes following the twist
+        for (var f = 0; f < 30; f++) {
+          var tf = 0.1 + r() * 0.8, cf = bz(tf), Tf = tg(tf), nf = [-Tf[1], Tf[0]], u = j(0.8) * w, a2 = Math.atan2(Tf[1], Tf[0]) + TILT * 0.8 + j(0.5), fl = 0.03 + r() * 0.05;
+          var s0 = [cf[0] + nf[0] * u, cf[1] + nf[1] * u];
+          fibres.push({ a: s0, b: [s0[0] + Math.cos(a2) * fl, s0[1] + Math.sin(a2) * fl], light: r() < 0.6, w: 0.005 + r() * 0.007, al: 0.3 + r() * 0.35 });
+        }
+        // halo hairs: leave the ply edge outward, bend, thin out
+        for (var h = 0; h < 60; h++) {
+          var th = 0.06 + r() * 0.88, ch = bz(th), Th = tg(th), nh = [-Th[1], Th[0]], sd = r() < 0.5 ? -1 : 1;
+          var base = [ch[0] + nh[0] * sd * w * 0.42, ch[1] + nh[1] * sd * w * 0.42];
+          var ah = Math.atan2(nh[1] * sd, nh[0] * sd) + j(2.2), hl = 0.04 + Math.pow(r(), 1.5) * 0.2, bend = j(1.4);
+          hairs.push({ a: base, dir: [Math.cos(ah), Math.sin(ah)], bend: [Math.cos(ah + bend), Math.sin(ah + bend)], len: hl, w: 0.008 + r() * 0.009, al: 0.5 + r() * 0.45, light: r() < 0.55 });
+        }
+        var M = bz(0.5), sgn = (n[0] * L[0] + n[1] * L[1]) >= 0 ? 1 : -1;
+        leg.plies.push({ pts: pts, w: w, lumps: lumps, fibres: fibres, hairs: hairs, g0: [M[0] - n[0] * sgn * w / 2, M[1] - n[1] * sgn * w / 2], g1: [M[0] + n[0] * sgn * w / 2, M[1] + n[1] * sgn * w / 2] });
+      });
+      out.legs.push(leg);
+    });
+    woolModels[v] = out;
+    return out;
+  }
+  function woolTones(c, paper) {
+    var t = yarnTones(c, paper);
+    t.groove = shade(c, -0.6); t.fuzz = shade(c, 0.12); t.fuzzDark = shade(c, -0.22); t.glow = c;
+    return t;
+  }
+  function hairPath(hh, k) { // quadratic hair: base → bent tip, length scaled by k
+    var L = hh.len * k, m = [hh.a[0] + hh.dir[0] * L * 0.5, hh.a[1] + hh.dir[1] * L * 0.5], e = [m[0] + hh.bend[0] * L * 0.5, m[1] + hh.bend[1] * L * 0.5];
+    return [hh.a, m, e];
+  }
+  function woolHairCount(halo) { return Math.round(60 * Math.min(1, halo)); }
+  var woolCache = {}, woolCount = 0;
+  function woolSprite(S, col, paper, v, halo) {
+    var key = Math.round(S * 4) + col + paper + v + "h" + Math.round(halo * 50);
+    if (woolCache[key]) return woolCache[key];
+    if (woolCount > 96) { woolCache = {}; woolCount = 0; }
+    var side = Math.max(2, Math.ceil(S * (1 + 2 * WOOL_PAD))), c = document.createElement("canvas");
+    c.width = c.height = side;
+    var x = c.getContext("2d"), o = S * WOOL_PAD, m = woolModel(v), tn = woolTones(col, paper), nh = woolHairCount(halo), hk = 0.55 + halo * 0.9;
+    var X = function (p) { return [o + p[0] * S, o + p[1] * S]; };
+    var poly = function (pts) { x.beginPath(); pts.forEach(function (p, i) { var q = X(p); if (i) x.lineTo(q[0], q[1]); else x.moveTo(q[0], q[1]); }); };
+    var seg = function (a, b) { var q0 = X(a), q1 = X(b); x.moveTo(q0[0], q0[1]); x.lineTo(q1[0], q1[1]); };
+    var hairs = function (p, light) {
+      for (var i = 0; i < nh; i++) {
+        var hh = p.hairs[i]; if (hh.light !== light) continue;
+        var q = hairPath(hh, hk), a = X(q[0]), b = X(q[1]), e = X(q[2]);
+        x.globalAlpha = hh.al * (0.5 + halo * 0.5); x.lineWidth = Math.max(0.35, hh.w * S);
+        x.beginPath(); x.moveTo(a[0], a[1]); x.quadraticCurveTo(b[0], b[1], e[0], e[1]); x.stroke();
+      }
+      x.globalAlpha = 1;
+    };
+    x.fillStyle = tn.hole;
+    m.holes.forEach(function (h) { var q = X(h); x.beginPath(); x.arc(q[0], q[1], S * 0.05, 0, Math.PI * 2); x.fill(); });
+    x.lineCap = "round"; x.lineJoin = "round";
+    m.legs.forEach(function (leg) {
+      // soft glow of loose fibre around the leg, then the cast shadow
+      if (halo > 0) {
+        x.save(); x.globalAlpha = 0.22 * halo; x.strokeStyle = tn.glow; x.lineWidth = S * (0.36 + 0.16 * halo);
+        x.filter = "blur(" + Math.max(0.5, S * 0.045).toFixed(2) + "px)"; poly(leg.glow); x.stroke(); x.restore();
+      }
+      x.save();
+      x.shadowColor = "rgba(0,0,0,0.36)"; x.shadowBlur = S * 0.07; x.shadowOffsetX = S * 0.02; x.shadowOffsetY = S * 0.035;
+      x.strokeStyle = tn.dark; x.lineWidth = S * 0.24; poly(leg.shadow); x.stroke();
+      x.restore();
+      leg.plies.forEach(function (p) { x.strokeStyle = tn.fuzzDark; hairs(p, false); });
+      leg.plies.forEach(function (p) {
+        x.strokeStyle = tn.groove; x.lineWidth = p.w * S; poly(p.pts.slice(1, -1)); x.stroke();
+        p.lumps.forEach(function (l) {
+          var q = X(l.c);
+          x.save(); x.translate(q[0], q[1]); x.rotate(l.ang);
+          var ry = l.ry * S, gr = x.createLinearGradient(0, -ry * l.lit, 0, ry * l.lit), base = shade(tn.mid, l.tone * 0.5);
+          gr.addColorStop(0, tn.groove); gr.addColorStop(0.3, tn.dark); gr.addColorStop(0.55, base); gr.addColorStop(0.8, shade(tn.light, l.tone * 0.3)); gr.addColorStop(1, base);
+          x.fillStyle = gr; x.beginPath(); x.ellipse(0, 0, l.rx * S, ry, 0, 0, Math.PI * 2); x.fill();
+          x.restore();
+        });
+        x.lineCap = "round";
+        [true, false].forEach(function (lt) {
+          x.strokeStyle = lt ? tn.shine : tn.twist;
+          p.fibres.forEach(function (fb) { if (fb.light !== lt) return; x.globalAlpha = fb.al; x.lineWidth = Math.max(0.3, fb.w * S); x.beginPath(); seg(fb.a, fb.b); x.stroke(); });
+        });
+        x.globalAlpha = 1;
+      });
+      leg.plies.forEach(function (p) { x.strokeStyle = tn.fuzz; hairs(p, true); });
+    });
+    woolCache[key] = c; woolCount++;
+    return c;
+  }
+  function woolVariant(x, y) { return Math.floor(hash(x, y, 91) * WOOL_VARIANTS); }
+
+  // ---------- strays: loose threads wandering off the stitched pattern ----------
+  // A random walk of 3–6 steps (1.2–2.6 cells, turning up to ±70°) from a needle hole,
+  // smoothed with Catmull–Rom into a single twisted thread.
+  function strayPaths(cells, Cn, Rn, s, ox, oy, amount, seed) {
+    if (!amount || !cells.length) return [];
+    var r = rng(seed * 131 + cells.length * 7 + Cn * 3 + Rn), n = Math.round(amount * Math.min(18, 1 + cells.length / 45)), out = [];
+    for (var i = 0; i < n; i++) {
+      var c = cells[Math.floor(r() * cells.length)], cx = c[0] + (r() < 0.5 ? 0.1 : 0.9), cy = c[1] + (r() < 0.5 ? 0.1 : 0.9);
+      var ang = r() * Math.PI * 2, ctrl = [[cx, cy]], steps = 3 + Math.floor(r() * 3 + amount * 2);
+      for (var k = 0; k < steps; k++) {
+        ang += (r() - 0.5) * 2.4; var st = 1.4 + r() * 1.8;
+        cx = Math.max(-2, Math.min(Cn + 2, cx + Math.cos(ang) * st)); cy = Math.max(-2, Math.min(Rn + 2, cy + Math.sin(ang) * st));
+        ctrl.push([cx, cy]);
+      }
+      var pts = [];
+      for (var q = 0; q < ctrl.length - 1; q++) {
+        var p0 = ctrl[Math.max(0, q - 1)], p1 = ctrl[q], p2 = ctrl[q + 1], p3 = ctrl[Math.min(ctrl.length - 1, q + 2)];
+        for (var t = 0; t < 1; t += 1 / 10) {
+          var t2 = t * t, t3 = t2 * t;
+          var f = function (a, b, cc, d) { return 0.5 * (2 * b + (-a + cc) * t + (2 * a - 5 * b + 4 * cc - d) * t2 + (-a + 3 * b - 3 * cc + d) * t3); };
+          pts.push([ox + f(p0[0], p1[0], p2[0], p3[0]) * s, oy + f(p0[1], p1[1], p2[1], p3[1]) * s]);
+        }
+      }
+      var last = ctrl[ctrl.length - 1]; pts.push([ox + last[0] * s, oy + last[1] * s]);
+      out.push({ pts: pts, w: s * (0.1 + r() * 0.04) });
+    }
+    return out;
+  }
   // ---------- painters: one drawing routine, two backends ----------
   var measureCtx = document.createElement("canvas").getContext("2d");
   function fontStr(o) { return (o.style || "normal") + " " + (o.weight || 400) + " " + o.size + "px " + o.family; }
@@ -856,6 +1010,24 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
       this.c.globalAlpha = a == null ? 1 : a;
       this.c.drawImage(sp, x - p, y - p, cell + 2 * p, cell + 2 * p);
       this.c.globalAlpha = 1;
+    },
+    wool: function (x, y, cell, col, paper, v, a, halo) {
+      var sp = woolSprite(cell * this.s, col, paper, v, halo), p = cell * WOOL_PAD;
+      this.c.globalAlpha = a == null ? 1 : a;
+      this.c.drawImage(sp, x - p, y - p, cell + 2 * p, cell + 2 * p);
+      this.c.globalAlpha = 1;
+    },
+    thread: function (pts, w, col, paper) {
+      var c = this.c, tn = yarnTones(col, paper), path = function () { c.beginPath(); pts.forEach(function (q, i) { if (i) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); }); };
+      c.save(); c.lineCap = "round"; c.lineJoin = "round";
+      c.shadowColor = "rgba(0,0,0,0.32)"; c.shadowBlur = w * 0.9; c.shadowOffsetX = w * 0.35; c.shadowOffsetY = w * 0.6;
+      c.strokeStyle = tn.dark; c.lineWidth = w; path(); c.stroke(); c.restore();
+      c.save(); c.lineCap = "round"; c.lineJoin = "round";
+      c.strokeStyle = tn.mid; c.lineWidth = w * 0.68; path(); c.stroke();
+      c.strokeStyle = tn.twist; c.globalAlpha = 0.45; c.lineCap = "butt"; c.lineWidth = w * 0.9; c.setLineDash([w * 0.45, w * 0.75]); path(); c.stroke();
+      c.setLineDash([]); c.lineCap = "round"; c.globalAlpha = 0.55; c.strokeStyle = tn.shine; c.lineWidth = Math.max(0.3, w * 0.2);
+      c.translate(-w * 0.16, -w * 0.16); path(); c.stroke();
+      c.restore();
     },
     text: function (s, x, y, o) {
       var c = this.c; c.font = fontStr(o); c.fillStyle = o.fill; c.globalAlpha = o.alpha == null ? 1 : o.alpha;
@@ -906,6 +1078,63 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
     yarn: function (x, y, cell, col, paper, v, a) {
       var id = this.yarnDef(col, paper, v);
       this.p.push('<use href="#' + id + '" transform="translate(' + r2(x) + " " + r2(y) + ") scale(" + r4(cell) + ')"' + this.op(a) + '/>');
+    },
+    woolDef: function (col, paper, v, halo) {
+      var hk = Math.round(halo * 50), id = "w" + col.slice(1) + paper.slice(1) + "v" + v + "h" + hk, self = this;
+      if (this.yarnIds[id]) return id;
+      if (!this.yarnIds.__wf) { this.defs.push('<filter id="wsh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="0.03"/></filter><filter id="wglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0.03"/></filter>'); this.yarnIds.__wf = 1; }
+      var m = woolModel(v), tn = woolTones(col, paper), nh = woolHairCount(halo), hl = 0.55 + halo * 0.9, g = ['<g id="' + id + '">'];
+      var pl = function (pts) { return pts.map(function (p) { return r4(p[0]) + "," + r4(p[1]); }).join(" "); };
+      var grad = function (lvl, lit) {
+        var gid = "wg" + col.slice(1) + "l" + lvl + (lit > 0 ? "a" : "b");
+        if (!self.yarnIds[gid]) {
+          var tone = (lvl - 1) * 0.1, base = shade(tn.mid, tone * 0.5);
+          self.defs.push('<linearGradient id="' + gid + '" x1="0" y1="' + (lit > 0 ? 0 : 1) + '" x2="0" y2="' + (lit > 0 ? 1 : 0) + '"><stop offset="0" stop-color="' + tn.groove + '"/><stop offset="0.3" stop-color="' + tn.dark + '"/><stop offset="0.55" stop-color="' + base + '"/><stop offset="0.8" stop-color="' + shade(tn.light, tone * 0.3) + '"/><stop offset="1" stop-color="' + base + '"/></linearGradient>');
+          self.yarnIds[gid] = 1;
+        }
+        return gid;
+      };
+      var hairs = function (p, light, colr) {
+        var d = [];
+        for (var i = 0; i < nh; i++) { var hh = p.hairs[i]; if (hh.light !== light) continue; var q = hairPath(hh, hl); d.push('<path d="M' + r4(q[0][0]) + " " + r4(q[0][1]) + "Q" + r4(q[1][0]) + " " + r4(q[1][1]) + " " + r4(q[2][0]) + " " + r4(q[2][1]) + '" stroke-width="' + r4(hh.w) + '" stroke-opacity="' + r2(hh.al * (0.5 + halo * 0.5)) + '"/>'); }
+        return d.length ? '<g fill="none" stroke="' + colr + '" stroke-linecap="round">' + d.join("") + "</g>" : "";
+      };
+      m.holes.forEach(function (h) { g.push('<circle cx="' + h[0] + '" cy="' + h[1] + '" r="0.05" fill="' + tn.hole + '"/>'); });
+      m.legs.forEach(function (leg) {
+        if (halo > 0) g.push('<line x1="' + r4(leg.glow[0][0]) + '" y1="' + r4(leg.glow[0][1]) + '" x2="' + r4(leg.glow[1][0]) + '" y2="' + r4(leg.glow[1][1]) + '" stroke="' + tn.glow + '" stroke-opacity="' + r2(0.22 * halo) + '" stroke-width="' + r4(0.36 + 0.16 * halo) + '" stroke-linecap="round" filter="url(#wglow)"/>');
+        g.push('<line x1="' + r4(leg.shadow[0][0]) + '" y1="' + r4(leg.shadow[0][1]) + '" x2="' + r4(leg.shadow[1][0]) + '" y2="' + r4(leg.shadow[1][1]) + '" stroke="#000" stroke-opacity="0.34" stroke-width="0.24" stroke-linecap="round" transform="translate(0.02 0.035)" filter="url(#wsh)"/>');
+        leg.plies.forEach(function (p) { g.push(hairs(p, false, tn.fuzzDark)); });
+        leg.plies.forEach(function (p) {
+          g.push('<polyline points="' + pl(p.pts.slice(1, -1)) + '" fill="none" stroke="' + tn.groove + '" stroke-width="' + r4(p.w) + '" stroke-linecap="round" stroke-linejoin="round"/>');
+          p.lumps.forEach(function (l) {
+            var lvl = Math.max(0, Math.min(2, Math.round(l.tone / 0.15) + 1));
+            g.push('<ellipse cx="0" cy="0" rx="' + r4(l.rx) + '" ry="' + r4(l.ry) + '" fill="url(#' + grad(lvl, l.lit) + ')" transform="translate(' + r4(l.c[0]) + " " + r4(l.c[1]) + ") rotate(" + r2(l.ang * 180 / Math.PI) + ')"/>');
+          });
+          [true, false].forEach(function (lt) {
+            var d = p.fibres.filter(function (f) { return f.light === lt; }).map(function (f) { return '<line x1="' + r4(f.a[0]) + '" y1="' + r4(f.a[1]) + '" x2="' + r4(f.b[0]) + '" y2="' + r4(f.b[1]) + '" stroke-width="' + r4(f.w) + '" stroke-opacity="' + r2(f.al) + '"/>'; });
+            if (d.length) g.push('<g stroke="' + (lt ? tn.shine : tn.twist) + '" stroke-linecap="round">' + d.join("") + "</g>");
+          });
+        });
+        leg.plies.forEach(function (p) { g.push(hairs(p, true, tn.fuzz)); });
+      });
+      g.push("</g>");
+      this.defs.push(g.join(""));
+      this.yarnIds[id] = 1;
+      return id;
+    },
+    wool: function (x, y, cell, col, paper, v, a, halo) {
+      var id = this.woolDef(col, paper, v, halo);
+      this.p.push('<use href="#' + id + '" transform="translate(' + r2(x) + " " + r2(y) + ") scale(" + r4(cell) + ')"' + this.op(a) + '/>');
+    },
+    thread: function (pts, w, col, paper) {
+      var tn = yarnTones(col, paper), d = "M" + pts.map(function (q) { return r2(q[0]) + " " + r2(q[1]); }).join("L");
+      if (!this.yarnIds.__tf) { this.defs.push('<filter id="tsh" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="' + r2(w * 0.45) + '"/></filter>'); this.yarnIds.__tf = 1; }
+      this.p.push('<g fill="none" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="' + d + '" stroke="#000" stroke-opacity="0.3" stroke-width="' + r2(w) + '" transform="translate(' + r2(w * 0.35) + " " + r2(w * 0.6) + ')" filter="url(#tsh)"/>' +
+        '<path d="' + d + '" stroke="' + tn.dark + '" stroke-width="' + r2(w) + '"/>' +
+        '<path d="' + d + '" stroke="' + tn.mid + '" stroke-width="' + r2(w * 0.68) + '"/>' +
+        '<path d="' + d + '" stroke="' + tn.twist + '" stroke-opacity="0.45" stroke-linecap="butt" stroke-width="' + r2(w * 0.9) + '" stroke-dasharray="' + r2(w * 0.45) + " " + r2(w * 0.75) + '"/>' +
+        '<path d="' + d + '" stroke="' + tn.shine + '" stroke-opacity="0.55" stroke-width="' + r2(Math.max(0.3, w * 0.2)) + '" transform="translate(' + r2(-w * 0.16) + " " + r2(-w * 0.16) + ')"/></g>');
     },
     text: function (s, x, y, o) {
       var anchor = o.align === "center" ? "middle" : (o.align === "right" ? "end" : "start");
@@ -967,6 +1196,7 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
     var BF = FONTS[val("fBinary")] || FONTS.haas;
     var gs = val("gridStyle"), every = parseInt(val("major"), 10) || 0;
     var style = val("stitchStyle"), pst = val("punchStyle"), bst = val("bitStyle"), place = val("place");
+    var halo = num("halo") / 100, threads = style === "yarn" || style === "wool" ? num("strays") / 100 : 0;
     var embFill = mix(col.paper, col.stitch, 0.28), embHi = mix(col.paper, "#ffffff", 0.9);
 
     // Hand: wobble moves a stroke (seeded per cell, so it is the same on every render and in every export);
@@ -1016,6 +1246,7 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
 
     function stitch(px, py, sz, v, gx0, gy0) {
       if (style === "yarn") P.yarn(px, py, sz, col.stitch, col.paper, v, inkA(gx0, gy0, 4));
+      else if (style === "wool") P.wool(px, py, sz, col.stitch, col.paper, woolVariant(gx0, gy0), inkA(gx0, gy0, 4), halo);
       else if (style === "penx") { var i1 = sz * 0.24; pen(px + i1, py + i1, px + sz - i1, py + sz - i1, col.stitch, pens.stitch, gx0, gy0, 1, sz); pen(px + sz - i1, py + i1, px + i1, py + sz - i1, col.stitch, pens.stitch, gx0, gy0, 5, sz); }
       else if (style === "penslash") pen(px + sz * 0.62, py + sz * 0.25, px + sz * 0.38, py + sz * 0.75, col.stitch, pens.stitch, gx0, gy0, 1, sz);
       else if (style === "cross") { var ins = sz * 0.2, lw = Math.max(pens.stitch, sz * 0.2); pen(px + ins, py + ins, px + sz - ins, py + sz - ins, col.stitch, lw, gx0, gy0, 1, sz); pen(px + sz - ins, py + ins, px + ins, py + sz - ins, col.stitch, lw, gx0, gy0, 5, sz); }
@@ -1047,15 +1278,16 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
     }
     // Marks for a whole field of states; seed offsets the hand so the illustration isn't a copy of the frame's.
     function drawField(S, Cn, Rn, ox, oy, s, seed) {
-      var half = s / 2;
+      var half = s / 2, stitchedCells = [];
       for (var y = 0; y < Rn; y++) for (var x = 0; x < Cn; x++) {
         var v = S[y * Cn + x]; if (!v) continue;
         var node = place === "all" || (place === "bits" && v >= 3);
         var px = ox + x * s - (node ? half : 0), py = oy + y * s - (node ? half : 0), hx = x + seed;
-        if (v === 1) stitch(px, py, s, yarnVariant(hx, y), hx, y);
+        if (v === 1) { stitch(px, py, s, yarnVariant(hx, y), hx, y); if (threads) stitchedCells.push([x - (node ? 0.5 : 0), y - (node ? 0.5 : 0)]); }
         else if (v === 2) punch(px, py, s, hx, y);
         else bit(v === 3, px, py, s, hx, y);
       }
+      if (threads && stitchedCells.length) strayPaths(stitchedCells, Cn, Rn, s, ox, oy, threads, seed + 1).forEach(function (t) { P.thread(t.pts, t.w, col.stitch, col.paper); });
     }
 
     P.rect(0, 0, W, H, col.paper);
@@ -1231,6 +1463,9 @@ button.primary { background: var(--accent); color: var(--accent-fg); border-colo
     $("contrastOut").textContent = (Math.round(num("contrast") * 100) / 100) + "×";
     $("softOut").textContent = num("soft").toFixed(2);
     ["wGrid", "wMajor", "wDot", "wStitch", "wPunch", "wBit", "wobble", "inkVar", "artThreshold"].forEach(function (id) { $(id + "Out").textContent = num(id).toFixed(2); });
+    $("haloOut").textContent = val("halo"); $("straysOut").textContent = val("strays");
+    ["yarnControls", "yarnNote"].forEach(function (id) { $(id).classList.toggle("hide", !/^(yarn|wool)$/.test(val("stitchStyle"))); });
+    $("halo").disabled = val("stitchStyle") !== "wool";
     $("artColsOut").textContent = val("artCols") + " columns";
     $("artWidthOut").textContent = val("artWidth") + " pt";
     $("artControls").classList.toggle("hide", !state.art);

@@ -11,7 +11,8 @@ It is one self-contained HTML file with no build step. Open `index.html` in a br
 
 - **Paper:** Letter by default, with other sizes, orientation, margins and grid resolution.
 - **Pattern:** two generated frames (sampler and minimal), an uploaded image, or both. Images are dithered with Floyd–Steinberg, Atkinson, Bayer 4×4 or a threshold.
-- **Marks:** blind emboss, cross stitch (flat or yarn with shading), pen X and slash, punched dots and ovals, and binary digits in cells or on grid intersections.
+- **Marks:** blind emboss, cross stitch (flat, floss or wool), pen X and slash, punched dots and ovals, and binary digits in cells or on grid intersections.
+- **Yarn:** wool keeps the cross-stitch pattern but draws each leg as two plies twisted into slanted lumps, with combed surface fibres. Halo adds loose fibre around the yarn. Strays leave loose threads trailing from the stitches, as a random walk of 3–8 steps smoothed into one twisted strand.
 - **Line:** grid as lines, crosses, dots, or lines and dots. Each has its own weight and colour, with hand wobble and uneven ink.
 - **Type:** the title block follows my InDesign styles: Adobe Garamond Pro for display, and Neue Haas Grotesk for the date and captions.
 - **Export:** 300 dpi PNG, SVG sized in inches, and a TXT stitch chart.
